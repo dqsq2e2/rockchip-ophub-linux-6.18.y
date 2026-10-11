@@ -191,3 +191,8 @@ sphinx_*/
 /recovery/
 /rootfs/rkdev_arm64
 /ref/
+/kernel-devel/
+/kernel-headers/
+/kos-debug/
+/release/
+
