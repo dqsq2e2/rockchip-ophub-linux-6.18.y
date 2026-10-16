@@ -32,3 +32,13 @@ config RFKILL_GPIO
 	help
 	  If you say yes here you get support of a generic gpio RFKILL
 	  driver.
+
+config RFKILL_RK
+	tristate "Rockchip RFKILL driver"
+	depends on RFKILL
+	depends on GPIOLIB || COMPILE_TEST
+	default n
+	help
+	  Rockchip RFKILL driver for WiFi and Bluetooth power control
+	  via GPIO. This is needed on Rockchip platforms to control
+	  WL_REG_ON and BT reset/wake GPIOs.
