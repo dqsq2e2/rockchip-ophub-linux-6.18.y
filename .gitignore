@@ -184,6 +184,8 @@ sphinx_*/
 
 # Rust analyzer configuration
 /rust-project.json
+
+# kdev
 /deprecated
 /kernel-headers/
 /kos/
@@ -196,3 +198,8 @@ sphinx_*/
 /rootfs/rkdev_arm64
 /recovery-buildlog.txt
 buildlog-recovery.txt
+/rkdev/rkdev_amd64
+/rkdev/rkdev_arm64
+/release
+
+
