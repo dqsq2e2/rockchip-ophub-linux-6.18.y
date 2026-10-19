@@ -680,7 +680,9 @@
 	reset-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_HIGH>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie2_0_rst &wifi_poweren>;
-	status = "okay";
+	/* 暂禁用：6.18 pcie-dw-rockchip 在本板初始化时挂死，
+	 * 先验证非 PCIe 路径能正常引导。 */
+	status = "disabled";
 };
 
 &pcie2x1l1 {
@@ -691,14 +693,16 @@
 	reset-gpios = <&gpio1 RK_PB4 GPIO_ACTIVE_HIGH>;
 	/* YT6801 PCIe 网卡 eFuse 未烧录 MAC，此处指定固定 MAC 供驱动回退读取 */
 	local-mac-address = [00 e0 4c 68 00 02];
-	status = "okay";
+	/* 暂禁用：同上。 */
+	status = "disabled";
 };
 
 &pcie30phy {
 	/* 对齐原厂 5.10 固件 rockchip,pcie30-phymode=<4> 聚合模式。
 	 * 6.18 phy 驱动改用 data-lanes 属性；不设 data-lanes 时默认聚合，
 	 * 与原厂意图一致。 */
-	status = "okay";
+	/* 暂禁用：同上。 */
+	status = "disabled";
 };
 
 &pcie3x4 {
@@ -706,7 +710,9 @@
 	vpcie3v3-supply = <&vcc3v3_pcie30>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie30x4m1_clkreqn>;
-	status = "okay";
+	/* 暂禁用：6.18 pcie-dw-rockchip 初始化时在 DBI 寄存器访问挂死，
+	 * 导致 AXI 总线死锁、系统无响应。先禁用以验证基础引导。 */
+	status = "disabled";
 };
 
 &pinctrl {

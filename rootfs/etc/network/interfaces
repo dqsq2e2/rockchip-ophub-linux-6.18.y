@@ -1,18 +1,12 @@
 auto lo
 iface lo inet loopback
 
+# eth0 由 dhcpcd 管理（DHCP client），这里保持 manual。
 auto eth0
 iface eth0 inet manual
 
-auto eth1
-iface eth1 inet manual
-
-auto br0
-iface br0 inet static
-    address 192.168.98.1
-    netmask 255.255.255.0
-    bridge_ports eth1
-    bridge_stp off
-    bridge_fd 0
-    up ip link set eth1 up
+# 注：原 br0/eth1 (192.168.98.0/24 DHCP server) 配置已移除。
+# eth1 由 PCIe 网卡 (YT6801, pcie2x1l2) 提供，当前 PCIe 已禁用，
+# eth1 不存在，br0 为空桥。PCIe 恢复后如需重建 LAN 网段，
+# 参见 etc/network/interfaces.bak。
 
