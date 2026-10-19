@@ -11,9 +11,12 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
+#include <linux/of.h>
+#include <linux/of_net.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/stmmac.h>
+#include <linux/etherdevice.h>
 
 #include "dwmac4.h"
 #include "stmmac.h"
@@ -120,6 +123,30 @@ static int motorcomm_efuse_get_patch_value(struct dwmac_motorcomm_priv *priv,
 	return -ENOENT;
 }
 
+/*
+ * 在 eFuse 未烧录 MAC 时，按 dts -> 随机 的顺序回退。
+ * PCI add-on 卡通常没有自身 of_node，向上遍历到 PCIe 控制器节点
+ * 查找 local-mac-address / mac-address 属性。
+ */
+static void motorcomm_fallback_mac(struct device *dev, u8 *out)
+{
+	struct device_node *np;
+	struct device *p;
+
+	/* dts 属性 local-mac-address / mac-address */
+	np = dev->of_node;
+	for (p = dev->parent; p && !np; p = p->parent)
+		np = p->of_node;
+	if (np && !of_get_mac_address(np, out)) {
+		dev_info(dev, "using MAC from device tree: %pM\n", out);
+		return;
+	}
+
+	/* 随机 MAC 兜底 */
+	eth_random_addr(out);
+	dev_warn(dev, "no MAC in eFuse or device tree, fallback to random: %pM\n", out);
+}
+
 static int motorcomm_efuse_read_mac(struct device *dev,
 				    struct dwmac_motorcomm_priv *priv, u8 *mac)
 {
@@ -128,15 +155,23 @@ static int motorcomm_efuse_read_mac(struct device *dev,
 
 	ret = motorcomm_efuse_get_patch_value(priv, EFUSE_ADDR_MACA0LR,
 					      &maca0lr);
-	if (ret)
+	if (ret) {
+		/* -ENOENT 表示 eFuse 未烧录 MAC（OEM add-on 卡常见），由调用者回退到随机 MAC；
+		 * 仅对真正的 I/O 错误报 error，避免误导。 */
+		if (ret == -ENOENT)
+			return ret;
 		return dev_err_probe(dev, ret,
 				     "failed to read maca0lr from eFuse\n");
+	}
 
 	ret = motorcomm_efuse_get_patch_value(priv, EFUSE_ADDR_MACA0HR,
 					      &maca0hr);
-	if (ret)
+	if (ret) {
+		if (ret == -ENOENT)
+			return ret;
 		return dev_err_probe(dev, ret,
 				     "failed to read maca0hr from eFuse\n");
+	}
 
 	mac[0] = FIELD_GET(GENMASK(15, 8), maca0hr);
 	mac[1] = FIELD_GET(GENMASK(7, 0), maca0hr);
@@ -339,10 +374,8 @@ static int motorcomm_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	ret = motorcomm_efuse_read_mac(&pdev->dev, priv, res.mac);
 	if (ret == -ENOENT) {
-		dev_warn(&pdev->dev, "eFuse contains no valid MAC address\n");
-		dev_warn(&pdev->dev, "fallback to random MAC address\n");
-
-		eth_random_addr(res.mac);
+		dev_info(&pdev->dev, "eFuse contains no valid MAC address\n");
+		motorcomm_fallback_mac(&pdev->dev, res.mac);
 	} else if (ret) {
 		return dev_err_probe(&pdev->dev, ret,
 				     "failed to read MAC address from eFuse\n");

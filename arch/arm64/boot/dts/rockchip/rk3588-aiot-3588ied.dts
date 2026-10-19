@@ -644,6 +644,8 @@
 
 &pcie2x1l2 {
 	reset-gpios = <&gpio1 RK_PB4 GPIO_ACTIVE_HIGH>;
+	/* YT6801 PCIe 网卡 eFuse 未烧录 MAC，此处指定固定 MAC 供驱动回退读取 */
+	local-mac-address = [00 e0 4c 68 00 02];
 	status = "okay";
 };
 
