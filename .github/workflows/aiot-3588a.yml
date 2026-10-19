@@ -1,9 +1,9 @@
-name: AIoT 3588IED Build
+name: AIoT 3588A Build
 
 on:
   push:
     branches:
-      - aiot-3588ied
+      - aiot-3588a
   repository_dispatch:
   workflow_dispatch:
 
@@ -85,18 +85,19 @@ jobs:
       - name: Upload to Release
         uses: ncipollo/release-action@main
         with:
-          tag: aiot-3588ied
+          tag: aiot-3588a
           artifacts: /builder/release/*
           allowUpdates: true
           removeArtifacts: false
           replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
           body: |
-            # 视美泰 AIoT-3588IED 内核镜像
+            # 视美泰 AIoT-3588A 内核镜像
 
             ## 免责声明
             #
             - **按原样提供**：本镜像不作任何明示或暗示的保证，使用风险由用户自行承担。
             - **无官方关联**：本项目与Rockchip、开发板厂家等任何商业实体无关，为非盈利自由分享。
             - **安全提示**：部署后请及时更新安全补丁、修改默认密码、配置防火墙及访问控制策略。
+
 
