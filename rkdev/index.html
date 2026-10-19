@@ -356,6 +356,24 @@
         .smart-detail-toggle:hover { background: var(--bg-info); border-color: var(--accent); color: var(--accent); }
         .smart-detail { display: none; margin-top: 6px; overflow: hidden; }
         .smart-detail.visible { display: block; }
+
+        /* smartctl 原始输出美化 */
+        .smartctl-output { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 14px 16px; font-family: 'JetBrains Mono','Cascadia Code','Fira Code','Consolas','Menlo',monospace; font-size: 12px; line-height: 1.7; overflow-x: auto; max-height: 520px; overflow-y: auto; }
+        .smartctl-output::-webkit-scrollbar { width: 8px; height: 8px; }
+        .smartctl-output::-webkit-scrollbar-track { background: #1e1e2e; }
+        .smartctl-output::-webkit-scrollbar-thumb { background: #45475a; border-radius: 4px; }
+        .smartctl-output::-webkit-scrollbar-thumb:hover { background: #585b70; }
+        .smartctl-banner { color: #89b4fa; font-weight: 600; }
+        .smartctl-section-header { color: #a6e3a1; font-weight: 600; margin: 10px 0 4px 0; }
+        .smartctl-section-header:first-child { margin-top: 0; }
+        .smartctl-key { color: #89b4fa; }
+        .smartctl-value { color: #f9e2af; }
+        .smartctl-pass { color: #a6e3a1; font-weight: 600; }
+        .smartctl-fail { color: #f38ba8; font-weight: 600; }
+        .smartctl-warn { color: #fab387; }
+        .smartctl-comment { color: #6c7086; font-style: italic; }
+        .smartctl-table-head { color: #cba6f7; font-weight: 600; }
+        .smartctl-divider { color: #45475a; }
         .part-detail-toggle { display: inline-block; margin: 6px 0 0 0; padding: 4px 14px; font-size: 12px; font-weight: 600; border: 1px solid var(--accent-border); border-radius: 4px; cursor: pointer; background: var(--bg-card); color: var(--accent-light); transition: all .2s; user-select: none; }
         .part-detail-toggle:hover { background: var(--bg-info); border-color: var(--accent); color: var(--accent); }
         .part-detail { display: none; }
@@ -2711,7 +2729,7 @@
                     html += '<div class="detail-group">';
                     html += '<span class="smart-detail-toggle" onclick="toggleDetail(\'raw-' + di + '\', this)">展开 smartctl 原始输出 ▸</span>';
                     html += '<div class="smart-detail" id="raw-' + di + '">';
-                    html += '<pre class="smart-raw-output">' + dev.smart.rawFull.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>';
+                    html += '<div class="smartctl-output">' + formatSmartctlOutput(dev.smart.rawFull) + '</div>';
                     html += '</div>';
                     html += '</div>';
                 }
@@ -2722,6 +2740,97 @@
             html += '</div>';
         }
         content.innerHTML = html;
+    }
+
+    // 将 smartctl 原始文本输出转为带语法高亮的 HTML
+    function formatSmartctlOutput(raw) {
+        if (!raw) return '';
+        const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const lines = raw.split('\n');
+        let html = '';
+        let inTable = false;
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i];
+            const trimmed = line.trim();
+
+            // 跳过纯空行（保留段落间距）
+            if (trimmed === '') { html += '<div style="height:6px"></div>'; continue; }
+
+            // smartctl 版本横幅（第一两行）
+            if (i < 2 && (trimmed.startsWith('smartctl') || trimmed.startsWith('Copyright'))) {
+                html += '<div class="smartctl-banner">' + esc(trimmed) + '</div>';
+                continue;
+            }
+
+            // 段落分隔线 === SECTION ===
+            if (/^={2,}/.test(trimmed) || /={2,}\s*$/.test(trimmed)) {
+                if (/^=+\s*$/.test(trimmed)) {
+                    // 纯 === 分隔线
+                    html += '<div class="smartctl-divider">' + esc(trimmed) + '</div>';
+                } else {
+                    // === SECTION NAME ===
+                    const name = trimmed.replace(/^=+\s*/, '').replace(/\s*=+$/, '');
+                    html += '<div class="smartctl-section-header">=== ' + esc(name) + ' ===</div>';
+                }
+                continue;
+            }
+
+            // PASSED / FAILED 健康结果
+            if (/PASSED/i.test(trimmed) && /result|health/i.test(trimmed)) {
+                html += '<div>' + esc(line).replace(/PASSED/gi, '<span class="smartctl-pass">PASSED</span>') + '</div>';
+                continue;
+            }
+            if (/FAILED/i.test(trimmed) && /result|health/i.test(trimmed)) {
+                html += '<div>' + esc(line).replace(/FAILED/gi, '<span class="smartctl-fail">FAILED</span>') + '</div>';
+                continue;
+            }
+
+            // 表格表头行（不含前导空格，含多个连续空格对齐的列名）
+            if (/^\S/.test(line) && /\s{2,}/.test(trimmed) && !trimmed.includes(':') &&
+                !trimmed.endsWith(':') && trimmed.split(/\s{2,}/).length >= 3) {
+                inTable = true;
+                html += '<div class="smartctl-table-head">' + esc(trimmed) + '</div>';
+                continue;
+            }
+            // 表格数据行（以空格开头 + 多列对齐）
+            if (/^\s+\S/.test(line) && inTable) {
+                html += '<div style="color:#bac2de">' + esc(line) + '</div>';
+                continue;
+            }
+            // 退出表格模式
+            if (inTable && /^\S/.test(line) && !/\s{2,}/.test(trimmed)) {
+                inTable = false;
+            }
+
+            // 键值对 "Key:                  Value"
+            if (/^[A-Za-z]/.test(trimmed) && trimmed.includes(':')) {
+                const idx = trimmed.indexOf(':');
+                const key = trimmed.substring(0, idx);
+                const val = trimmed.substring(idx + 1).trim();
+                let valHtml = esc(val);
+                // 高亮关键值
+                if (/^0x[0-9a-f]+$/i.test(val)) valHtml = '<span class="smartctl-value">' + valHtml + '</span>';
+                if (/PASSED/i.test(val)) valHtml = '<span class="smartctl-pass">PASSED</span>';
+                if (/FAILED/i.test(val)) valHtml = '<span class="smartctl-fail">FAILED</span>';
+                if (/^\d+(\.\d+)?\s*(Celsius|°C|%|GB|MB|TB|hours|K|W)$/i.test(val)) valHtml = '<span class="smartctl-value">' + valHtml + '</span>';
+                html += '<div><span class="smartctl-key">' + esc(key) + ':</span> ' + valHtml + '</div>';
+                continue;
+            }
+
+            // 注释/提示行
+            if (/^(Use |Please |Note:|Warning:)/i.test(trimmed)) {
+                html += '<div class="smartctl-warn">' + esc(trimmed) + '</div>';
+                continue;
+            }
+            if (/^(No |Self-test|Errors)/i.test(trimmed) && trimmed.length < 60) {
+                html += '<div class="smartctl-comment">' + esc(trimmed) + '</div>';
+                continue;
+            }
+
+            // 普通行
+            html += '<div>' + esc(line) + '</div>';
+        }
+        return html;
     }
 
     function toggleDetail(id, btn) {
