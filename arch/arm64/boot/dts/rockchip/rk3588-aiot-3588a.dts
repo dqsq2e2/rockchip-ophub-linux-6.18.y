@@ -1328,3 +1328,17 @@
 &wdt {
 	status = "disabled";
 };
+
+/* 对齐官方 5.10 固件：禁用 ARM MMU-600 (SMMU v3)。
+ * 官方 v20 DTB 中 fc900000 和 fcb00000 均为 status="disabled"。
+ * 6.18 base dtsi 未设 status（默认 enabled），导致 reboot 时
+ * arm_smmu_device_disable() 的 CR0ACK 寄存器轮询挂死，
+ * device_shutdown 卡在 "arm-smmu-v3 fc900000.iommu: shutdown"。
+ * PCIe 控制器已禁用，SMMU 无使用场景，直接禁用。 */
+&mmu600_pcie {
+	status = "disabled";
+};
+
+&mmu600_php {
+	status = "disabled";
+};

@@ -23,7 +23,7 @@ fmt_if() {
 # monitor: 轻量监测，供 cron 周期调用。仅比对当前 IP 与缓存，变化时才 refresh。
 # 避免每分钟生成完整 banner 文件；IP 未变化时几乎零开销。
 if [ "$mode" = monitor ]; then
-	cur="$(fmt_if eth0 WAN)$(fmt_if br0 LAN)"
+	cur="$(fmt_if eth0 WAN)"
 	stamp=/run/aiot-3588a-issue.ip
 	if [ -r "$stamp" ] && [ "$cur" = "$(cat "$stamp" 2>/dev/null)" ]; then
 		exit 0
@@ -33,7 +33,6 @@ if [ "$mode" = monitor ]; then
 fi
 
 line1=$(fmt_if eth0 WAN)
-line2=$(fmt_if br0 LAN)
 
 tmpf=$(mktemp)
 
@@ -70,7 +69,6 @@ cat >> "$tmpf" <<'ART'
   OS: Alpine Linux v3.24
   Kernel: KVER
   LINE1
-  LINE2
   Default Account: root/root
   Documentation: https://github.com/yifengyou/aiot-3588a
 
@@ -79,7 +77,7 @@ cat >> "$tmpf" <<'ART'
 
 ART
 
-sed -i -e "s|KVER|${kver}|" -e "s|LINE1|${line1}|" -e "s|LINE2|${line2}|" "$tmpf"
+sed -i -e "s|KVER|${kver}|" -e "s|LINE1|${line1}|" "$tmpf"
 
 if cmp -s "$tmpf" /etc/issue 2>/dev/null; then
 	rm -f "$tmpf"
