@@ -278,6 +278,8 @@
 	phy-mode = "rgmii-rxid";
 	tx_delay = <0x43>;
 	phy-handle = <&rgmii_phy1>;
+	local-mac-address = [00 e0 4c 68 00 01];
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&gmac1_miim
 		     &gmac1_tx_bus2
