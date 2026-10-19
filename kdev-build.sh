@@ -124,7 +124,7 @@ tee /mnt/recovery.conf <<'EOF'
 label RK3588 Linux recovery
     kernel kernel-uImage.lzma
     fdt rk3588-aiot-3588a.dtb
-    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 rootwait rw
+    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 rootwait rw panic=6
 EOF
 umount /mnt
 sync
