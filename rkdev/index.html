@@ -2587,7 +2587,7 @@
         let html = '';
         for (let di = 0; di < devices.length; di++) {
             const dev = devices[di];
-            const icon = dev.type === 'USB' ? '🔌' : dev.type === 'SSD' ? '💾' : '💿';
+            const icon = dev.type === 'USB' ? '🔌' : dev.type === 'SSD' ? '💾' : dev.type === 'eMMC' ? '🗃️' : '💿';
             html += '<div class="storage-device">';
             html += '<div class="storage-device-header">';
             html += '<span class="storage-device-icon">' + icon + '</span>';
@@ -2616,7 +2616,7 @@
 
             html += '<div class="storage-section-title">🩺 SMART 健康状态</div>';
             if (dev.smart.available) {
-                const healthClass = dev.smart.health === 'PASSED' ? 'smart-health-passed' : (dev.smart.health === 'FAILED' ? 'smart-health-failed' : '');
+                const healthClass = dev.smart.health === 'PASSED' ? 'smart-health-passed' : (dev.smart.health === 'FAILED' ? 'smart-health-failed' : (dev.smart.health === '良好' ? 'smart-health-passed' : (dev.smart.health === '危险' || dev.smart.health === '严重' ? 'smart-health-failed' : '')));
                 html += '<div class="storage-smart-grid">';
                 if (dev.smart.health) html += '<div class="smart-item"><div class="smart-label">健康状态</div><div class="smart-value ' + healthClass + '">' + dev.smart.health + '</div></div>';
                 if (dev.smart.protocol) html += '<div class="smart-item"><div class="smart-label">协议</div><div class="smart-value">' + dev.smart.protocol + '</div></div>';
@@ -2628,6 +2628,60 @@
                 if (dev.smart.hours) html += '<div class="smart-item"><div class="smart-label">通电时长</div><div class="smart-value">' + dev.smart.hours + '</div></div>';
                 if (dev.smart.powerCycles) html += '<div class="smart-item"><div class="smart-label">通电次数</div><div class="smart-value">' + dev.smart.powerCycles + '</div></div>';
                 html += '</div>';
+
+                // ── eMMC 专属健康度卡片 ──
+                if (dev.smart.emmc) {
+                    const e = dev.smart.emmc;
+                    html += '<div class="storage-section-title">📊 eMMC 寿命诊断</div>';
+                    // 寿命剩余进度条
+                    const leftPct = e.lifeLeftPct;
+                    const barColor = leftPct > 50 ? '#4caf50' : (leftPct > 20 ? '#ff9800' : '#f44336');
+                    html += '<div style="margin:10px 0 15px 0;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>剩余寿命</span><span style="font-weight:700;color:' + barColor + '">' + leftPct + '%</span></div><div style="background:var(--bg-hover);border-radius:4px;height:18px;overflow:hidden;"><div style="width:' + leftPct + '%;height:100%;background:' + barColor + ';border-radius:4px;transition:width .4s;"></div></div></div>';
+                    // 寿命详情网格
+                    html += '<div class="storage-smart-grid">';
+                    if (e.preEolText) html += '<div class="smart-item"><div class="smart-label">PRE_EOL 预警</div><div class="smart-value">' + e.preEolText + '</div></div>';
+                    if (e.lifeAText) html += '<div class="smart-item"><div class="smart-label">SLC 寿命 (Typ A)</div><div class="smart-value">' + e.lifeAText + '</div></div>';
+                    if (e.lifeBText) html += '<div class="smart-item"><div class="smart-label">MLC 寿命 (Typ B)</div><div class="smart-value">' + e.lifeBText + '</div></div>';
+                    if (e.manufacturer) html += '<div class="smart-item"><div class="smart-label">厂商</div><div class="smart-value">' + e.manufacturer + '</div></div>';
+                    if (e.product) html += '<div class="smart-item"><div class="smart-label">型号</div><div class="smart-value">' + e.product + '</div></div>';
+                    if (e.mfgDate) html += '<div class="smart-item"><div class="smart-label">生产日期</div><div class="smart-value">' + e.mfgDate + '</div></div>';
+                    if (e.version) html += '<div class="smart-item"><div class="smart-label">eMMC 版本</div><div class="smart-value">' + e.version + '</div></div>';
+                    if (e.deviceType) html += '<div class="smart-item"><div class="smart-label">设备类型</div><div class="smart-value">' + e.deviceType + '</div></div>';
+                    if (e.boot1SizeKb) html += '<div class="smart-item"><div class="smart-label">Boot1 大小</div><div class="smart-value">' + e.boot1SizeKb + ' KB</div></div>';
+                    if (e.boot2SizeKb) html += '<div class="smart-item"><div class="smart-label">Boot2 大小</div><div class="smart-value">' + e.boot2SizeKb + ' KB</div></div>';
+                    if (e.rpmbSizeKb) html += '<div class="smart-item"><div class="smart-label">RPMB 大小</div><div class="smart-value">' + e.rpmbSizeKb + ' KB</div></div>';
+                    html += '</div>';
+                    // 综合寿命描述
+                    if (e.lifeText) {
+                        html += '<div class="smart-item" style="margin-top:10px;width:100%;"><div class="smart-label">综合寿命评估</div><div class="smart-value" style="font-size:13px;line-height:1.6;">' + e.lifeText + '</div></div>';
+                    }
+                    // 可展开的完整 ext_csd 详情
+                    html += '<div class="detail-group">';
+                    html += '<span class="smart-detail-toggle" onclick="toggleDetail(\'emmc-' + di + '\', this)">展开 eMMC 完整诊断信息 ▸</span>';
+                    html += '<div class="smart-detail" id="emmc-' + di + '">';
+                    html += '<table class="smart-attrs-table"><thead><tr><th>属性</th><th>值</th></tr></thead><tbody>';
+                    const rows = [
+                        ['CID 原始值', e.cidRaw], ['厂商 ID', e.manufacturer], ['产品名', e.product],
+                        ['OEM ID', e.oemId], ['序列号', e.serialHex], ['固件版本', e.fwRev],
+                        ['生产日期', e.mfgDate], ['PRE_EOL (dec)', e.preEolDec], ['PRE_EOL (text)', e.preEolText],
+                        ['LIFE_A (dec)', e.lifeADec], ['LIFE_A (text)', e.lifeAText],
+                        ['LIFE_B (dec)', e.lifeBDec], ['LIFE_B (text)', e.lifeBText],
+                        ['已用百分比', e.lifeUsedPct + '%'], ['剩余百分比', e.lifeLeftPct + '%'],
+                        ['eMMC 版本', e.version], ['版本原始值', e.versionRaw],
+                        ['版本备注', e.versionNote || '-'], ['设备类型', e.deviceType],
+                        ['CMDQ 支持', e.cmdqSupport > 0 ? '是(' + e.cmdqSupport + ')' : '否'],
+                        ['Boot1 大小', e.boot1SizeKb + ' KB'], ['Boot2 大小', e.boot2SizeKb + ' KB'],
+                        ['RPMB 大小', e.rpmbSizeKb + ' KB']
+                    ];
+                    for (const [k, v] of rows) {
+                        if (v !== undefined && v !== '' && v !== null) {
+                            html += '<tr><td>' + k + '</td><td>' + v + '</td></tr>';
+                        }
+                    }
+                    html += '</tbody></table>';
+                    html += '</div>';
+                    html += '</div>';
+                }
 
                 if (dev.smart.nvmeAttrs && dev.smart.nvmeAttrs.length) {
                     html += '<div class="detail-group">';

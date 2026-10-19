@@ -2607,20 +2607,59 @@ type StoragePartition struct {
 }
 
 type StorageSmart struct {
-	Available bool              `json:"available"`
-	Model     string            `json:"model"`
-	Serial    string            `json:"serial"`
-	Firmware  string            `json:"firmware"`
-	Capacity  string            `json:"capacity"`
-	Temp      string            `json:"temp"`
-	Hours     string            `json:"hours"`
+	Available   bool            `json:"available"`
+	Model       string          `json:"model"`
+	Serial      string          `json:"serial"`
+	Firmware    string          `json:"firmware"`
+	Capacity    string          `json:"capacity"`
+	Temp        string          `json:"temp"`
+	Hours       string          `json:"hours"`
 	PowerCycles string          `json:"powerCycles"`
-	Health    string            `json:"health"`
-	Protocol  string            `json:"protocol"`
-	Attrs     []SmartAttr       `json:"attrs"`
-	NvmeAttrs []NvmeSmartAttr   `json:"nvmeAttrs"`
-	RawFull   string            `json:"rawFull"`
-	Error     string            `json:"error,omitempty"`
+	Health      string          `json:"health"`
+	Protocol    string          `json:"protocol"`
+	Attrs       []SmartAttr     `json:"attrs"`
+	NvmeAttrs   []NvmeSmartAttr `json:"nvmeAttrs"`
+	Emmc        *EmmcHealth     `json:"emmc,omitempty"`
+	RawFull     string          `json:"rawFull"`
+	Error       string          `json:"error,omitempty"`
+}
+
+// EmmcHealth 承载 eMMC 专属健康度信息，数据源为 ext_csd 寄存器与 CID。
+// 移植自 luci-app-route-tool 的 storage_health.sh / storage_detail.sh / storage_common.sh。
+type EmmcHealth struct {
+	// 寿命估算（ext_csd byte 267/268/269）
+	PreEolDec  int    `json:"preEolDec"`   // PRE_EOL_INFO: 0=未上报 1=正常 2=接近预警 3=已到预警
+	PreEolText string `json:"preEolText"`  // 上述值的文字描述
+	LifeADec   int    `json:"lifeADec"`    // DEVICE_LIFE_TIME_EST_TYP_A (SLC) 0-11
+	LifeBDec   int    `json:"lifeBDec"`    // DEVICE_LIFE_TIME_EST_TYP_B (MLC) 0-11
+	LifeAText  string `json:"lifeAText"`   // SLC 寿命档位文字
+	LifeBText  string `json:"lifeBText"`   // MLC 寿命档位文字
+	LifeUsed   int    `json:"lifeUsed"`    // 较大磨损值(0-11)，用于估算剩余寿命
+	LifeUsedPct int   `json:"lifeUsedPct"` // 已用百分比（按较大磨损值 *10 估算）
+	LifeLeftPct int   `json:"lifeLeftPct"` // 剩余百分比
+	LifeText   string `json:"lifeText"`    // 综合寿命描述
+
+	// CID 寄存器解析（厂商/型号/序列号/生产日期）
+	CidRaw       string `json:"cidRaw"`
+	Manufacturer string `json:"manufacturer"`
+	Product      string `json:"product"`
+	OemID        string `json:"oemId"`
+	SerialHex    string `json:"serialHex"`
+	FwRev        string `json:"fwRev"`
+	MfgDate      string `json:"mfgDate"`
+
+	// ext_csd 其它字段
+	Version      string `json:"version"`      // eMMC 规范版本
+	VersionRaw   string `json:"versionRaw"`   // EXT_CSD_REV 原始值
+	VersionNote  string `json:"versionNote"`  // 版本判定备注
+	DeviceType   string `json:"deviceType"`   // 设备类型
+	CmdqSupport  int    `json:"cmdqSupport"`  // CMDQ 支持(0=否 >0=是)
+	Boot1SizeKb  int    `json:"boot1SizeKb"`  // Boot1 大小 KB
+	Boot2SizeKb  int    `json:"boot2SizeKb"`  // Boot2 大小 KB
+	RpmbSizeKb   int    `json:"rpmbSizeKb"`   // RPMB 大小 KB
+
+	// 原始数据
+	ExtCsdHex    string `json:"extCsdHex,omitempty"` // ext_csd 原始 hex（用于调试，可省略）
 }
 
 type SmartAttr struct {
@@ -2962,6 +3001,10 @@ func detectStorageDevices() ([]StorageDevice, error) {
 		if strings.HasPrefix(name, "sr") || strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "zram") {
 			continue
 		}
+		// 跳过 eMMC 的 boot0/boot1/rpmb 子分区，它们是同一颗 eMMC 的硬件分区，无需单独展示
+		if strings.Contains(name, "boot0") || strings.Contains(name, "boot1") || strings.Contains(name, "rpmb") {
+			continue
+		}
 
 		sizeBytes, _ := strconv.ParseInt(fields[1], 10, 64)
 		rota := fields[2]
@@ -2983,6 +3026,9 @@ func detectStorageDevices() ([]StorageDevice, error) {
 		}
 		if transport == "usb" {
 			devType = "USB"
+		}
+		if transport == "mmc" || strings.HasPrefix(name, "mmcblk") {
+			devType = "eMMC"
 		}
 
 		device := "/dev/" + name
@@ -3098,7 +3144,438 @@ func parseFdiskOutput(output string) []StoragePartition {
 	return parts
 }
 
+// ── eMMC 健康度检测 ──────────────────────────────────────────────────
+// 移植自 luci-app-route-tool 的 storage_common.sh / storage_health.sh / storage_detail.sh
+// 数据源：/sys/kernel/debug/mmcN/mmcN:0001/ext_csd（1024 字符 hex 字符串）+ sysfs CID
+
+// emmcManfName 按 JEDEC CID MID 返回厂商名，对照 mmc-utils lsmmc.c 并补充实测。
+func emmcManfName(mid string) string {
+	mid = strings.ToLower(strings.TrimPrefix(mid, "0x"))
+	names := map[string]string{
+		"01": "SkyHigh Memory(原瑞萨)", "02": "SK Hynix(海力士)/Kingston(金士顿)",
+		"03": "Toshiba(东芝)", "04": "Intel(英特尔)", "06": "Micron(美光)",
+		"07": "Spansion/Cypress", "08": "Toshiba/Kioxia(东芝/铠侠)",
+		"09": "STMicro(意法半导体)", "0a": "GigaDevice(兆易创新)", "0b": "Macronix(旺宏)",
+		"0c": "Winbond(华邦)", "11": "Toshiba(东芝)", "13": "Micron(美光)",
+		"15": "Samsung(三星)", "19": "Western Digital(西部数据)",
+		"1b": "Transcend(创见)/Samsung(三星)", "1d": "Corsair(海盗船)/ADATA(威刚)",
+		"1f": "Kingston(金士顿)", "20": "Lexar(雷克沙)", "25": "Kingston(金士顿)",
+		"28": "Crucial(英睿达)/Lexar(雷克沙)", "29": "ADATA(威刚)",
+		"2c": "HIKSEMI(海康存储)", "2d": "YMTC(长江存储)", "2e": "CXMT(长鑫存储)",
+		"2f": "Konsemi(康芯威)", "30": "Netac(朗科)/SanDisk(闪迪)",
+		"33": "STMicroelectronics(意法)", "37": "KingMax(胜创)",
+		"41": "Kingston(金士顿)", "44": "ATP", "45": "SanDisk(闪迪)",
+		"6f": "STMicroelectronics(意法)", "70": "Kingston(金士顿)",
+		"74": "Transcend(创见)", "76": "Patriot(爱国者)", "82": "Gobe/Sony(索尼)",
+		"88": "Longsys(江波龙)", "90": "SK Hynix(海力士)", "9b": "YMTC(长江存储)",
+		"d6": "Longsys(江波龙)", "d9": "Apacer(宇瞻)",
+		"df": "SYC(时意创)/SiliconGo(硅格)", "ea": "SiliconGo(硅格)",
+		"ec": "Rayson(晶存)", "f2": "ICMAX(宏旺)", "f4": "BIWIN(佰维)",
+		"fe": "Micron(美光)",
+	}
+	if name, ok := names[mid]; ok {
+		return name
+	}
+	if mid == "" {
+		return "未知"
+	}
+	return "未知(0x" + mid + ")"
+}
+
+// emmcChipName 按 MID + PNM(hex) 组合判定具体芯片型号，优先于 emmcManfName。
+func emmcChipName(mid, pnmHex string) string {
+	mid = strings.ToLower(strings.TrimPrefix(mid, "0x"))
+	pnmHex = strings.ToLower(strings.TrimPrefix(pnmHex, "0x"))
+	key := mid + ":" + pnmHex
+	pairs := map[string]string{
+		"f4:415142313154":           "BIWIN(佰维)",
+		"f4:426977696e":             "BIWIN(佰维)",
+		"90:4841473265":             "SK Hynix(海力士)",
+		"90:4838473461":             "SK Hynix(海力士)",
+		"2c:4853654d4d":             "HIKSEMI(海康存储)",
+		"2f:303553303030":           "Konsemi(康芯威)",
+		"ea:533033313131":           "Kowin(康盈)",
+		"ea:5350654d4d43":           "SiliconGo(硅格)",
+		"15:41474e443352":           "Samsung(三星)",
+		"15:384754463452":           "Samsung(三星)",
+		"11:303034473630":           "Toshiba(东芝)",
+		"ec:415432533338":           "Rayson(晶存)",
+		"70:4d473236303":            "Samsung(三星)",
+		"df:534341":                 "SYC(时意创)",
+		"88:4e43617264":             "Longsys(江波龙)",
+		"d6:4d4d43384742":           "Hosin Global",
+		"9b:593053323536":           "YMTC(长江存储)",
+	}
+	if name, ok := pairs[key]; ok {
+		return name
+	}
+	return emmcManfName(mid)
+}
+
+// hex2ascii 将 hex 字符串转为可打印 ASCII（不可打印字节丢弃）。
+func hex2ascii(hex string) string {
+	var out strings.Builder
+	for i := 0; i+1 < len(hex); i += 2 {
+		var v int64
+		_, _ = fmt.Sscanf(hex[i:i+2], "%x", &v)
+		if v >= 32 && v <= 126 {
+			out.WriteByte(byte(v))
+		}
+	}
+	return out.String()
+}
+
+// cidMdt 解析 CID 的 MDT 字段（2 个 hex 字符）：高 nibble=月份，低 nibble=年份偏移(基准2013)。
+func cidMdt(mdtHex string) string {
+	if len(mdtHex) < 2 {
+		return "?/?"
+	}
+	var month, yearOff int64
+	_, _ = fmt.Sscanf(string(mdtHex[0]), "%x", &month)
+	_, _ = fmt.Sscanf(string(mdtHex[1]), "%x", &yearOff)
+	year := 2013 + int(yearOff)
+	if month < 1 || month > 12 {
+		return "?/" + strconv.Itoa(year)
+	}
+	return strconv.Itoa(int(month)) + "/" + strconv.Itoa(year)
+}
+
+// lifeUsedText 将 LIFE_A/B 档位(0-11)转为文字。
+func lifeUsedText(dec int) string {
+	texts := []string{"厂家未上报", "0-10%", "10-20%", "20-30%", "30-40%", "40-50%",
+		"50-60%", "60-70%", "70-80%", "80-90%", "90-100%", "超过100%"}
+	if dec >= 0 && dec < len(texts) {
+		return texts[dec]
+	}
+	return "未知"
+}
+
+// preEolText 将 PRE_EOL 值转为文字。
+func preEolText(dec int) string {
+	switch dec {
+	case 0, 1:
+		return "正常"
+	case 2:
+		return "接近寿命预警"
+	case 3:
+		return "已到寿命预警"
+	default:
+		return "未知"
+	}
+}
+
+// emmcStatusByUsed 综合磨损值与 PRE_EOL 给出健康状态。
+func emmcStatusByUsed(used, preEol int) string {
+	if preEol >= 3 {
+		return "危险"
+	}
+	if preEol == 2 {
+		return "警告"
+	}
+	switch {
+	case used <= 3:
+		return "良好"
+	case used <= 6:
+		return "一般"
+	case used <= 8:
+		return "警告"
+	default:
+		return "严重"
+	}
+}
+
+// emmcSysfsDev 描述一个 eMMC 设备在 sysfs/debugfs 中的关键路径。
+type emmcSysfsDev struct {
+	SysfsDir   string // /sys/class/mmc_host/mmcN/mmcN:0001 （含 cid/manfid/name/serial 等）
+	ExtCsdPath string // /sys/kernel/debug/mmcN/mmcN:0001/ext_csd 或 sysfs 下的 ext_csd
+	BlkName    string // mmcblkN
+	HostIdx    string // mmcN 的 N
+}
+
+// findEmmcDev 按 block 设备名（如 "mmcblk2"）查找对应的 eMMC sysfs 设备。
+// 若 blkName 为空则返回第一个找到的 eMMC 设备。
+// ext_csd 优先取 sysfs（部分内核提供），否则取 debugfs；CID/厂商字段始终取 sysfs。
+func findEmmcDev(blkName string) (*emmcSysfsDev, bool) {
+	matches, _ := filepath.Glob("/sys/class/mmc_host/mmc*/mmc*:*")
+	for _, devDir := range matches {
+		// 找对应的 block 设备名
+		blkMatches, _ := filepath.Glob(devDir + "/block/mmcblk*")
+		if len(blkMatches) == 0 {
+			continue
+		}
+		thisBlk := filepath.Base(blkMatches[0])
+		// 只取主分区，跳过 boot0/boot1/rpmb
+		if strings.Contains(thisBlk, "boot") || strings.Contains(thisBlk, "rpmb") {
+			continue
+		}
+		if blkName != "" && thisBlk != blkName {
+			continue
+		}
+		dev := &emmcSysfsDev{SysfsDir: devDir, BlkName: thisBlk}
+		// 从目录名提取 host idx: /sys/class/mmc_host/mmc2/mmc2:0001 -> "2"
+		// 注意 "mmc_host" 也以 "mmc" 开头，需排除
+		parts := strings.Split(devDir, "/")
+		for _, p := range parts {
+			if strings.HasPrefix(p, "mmc") && p != "mmc_host" && !strings.Contains(p, ":") {
+				dev.HostIdx = strings.TrimPrefix(p, "mmc")
+				break
+			}
+		}
+		// ext_csd：优先 sysfs（部分内核提供），否则 debugfs
+		sysfsExt := devDir + "/ext_csd"
+		if _, err := os.Stat(sysfsExt); err == nil {
+			dev.ExtCsdPath = sysfsExt
+		} else {
+			// debugfs: /sys/kernel/debug/mmcN/mmcN:0001/ext_csd
+			devName := filepath.Base(devDir) // mmc2:0001
+			dbgExt := "/sys/kernel/debug/mmc" + dev.HostIdx + "/" + devName + "/ext_csd"
+			if _, err := os.Stat(dbgExt); err == nil {
+				dev.ExtCsdPath = dbgExt
+			}
+		}
+		return dev, true
+	}
+	return nil, false
+}
+
+// readSysfsAttr 读取 sysfs 属性文件并返回去除空白后的字符串。
+func readSysfsAttr(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// readSysfsAttrHex 读取 sysfs 属性并返回 "0x" 前缀的小写 hex。
+func readSysfsAttrHex(path string) string {
+	v := readSysfsAttr(path)
+	if v == "" {
+		return ""
+	}
+	return "0x" + strings.ToLower(strings.TrimPrefix(v, "0x"))
+}
+
+// readExtCsd 读取 ext_csd 并返回清洗后的 hex 字符串（小写、去空白，长度应 >= 1000）。
+func readExtCsd(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	hex := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(string(data), "\n", "")))
+	hex = strings.ReplaceAll(hex, " ", "")
+	if len(hex) < 1000 {
+		return ""
+	}
+	return hex
+}
+
+// extCsdByteHex 取 ext_csd hex 字符串中第 byteIdx 字节（2 个 hex 字符）。
+func extCsdByteHex(hex string, byteIdx int) string {
+	start := byteIdx * 2
+	if start+2 > len(hex) {
+		return "00"
+	}
+	return hex[start : start+2]
+}
+
+// extCsdByteDec 取 ext_csd 第 byteIdx 字节的十进制值。
+func extCsdByteDec(hex string, byteIdx int) int {
+	var v int64
+	_, _ = fmt.Sscanf(extCsdByteHex(hex, byteIdx), "%x", &v)
+	return int(v)
+}
+
+// getEmmcHealth 读取 eMMC ext_csd 与 CID，返回完整的健康度信息。
+// 移植自 storage_health.sh + storage_detail.sh + storage_common.sh。
+func getEmmcHealth(device string) StorageSmart {
+	// 从 /dev/mmcblk2boot0 提取主设备名 mmcblk2；mmcblk2rpmb 同理
+	blkName := strings.TrimPrefix(device, "/dev/")
+	blkName = strings.TrimSuffix(blkName, "boot0")
+	blkName = strings.TrimSuffix(blkName, "boot1")
+	blkName = strings.TrimSuffix(blkName, "rpmb")
+	// 去尾部 pN 分区号（mmcblk0p1 -> mmcblk0）
+	if idx := strings.IndexByte(blkName, 'p'); idx > 0 {
+		// 只当 p 后面全是数字时才去
+		if _, err := strconv.Atoi(blkName[idx+1:]); err == nil {
+			blkName = blkName[:idx]
+		}
+	}
+
+	dev, found := findEmmcDev(blkName)
+	if !found {
+		return StorageSmart{Available: false, Error: "未检测到 eMMC 设备 " + device + "（确认 debugfs 已挂载）"}
+	}
+
+	emmc := &EmmcHealth{}
+	info := StorageSmart{Available: true, Protocol: "eMMC", Emmc: emmc}
+
+	extCsd := readExtCsd(dev.ExtCsdPath)
+
+	// ── ext_csd 寿命解析（byte 267/268/269）──
+	if extCsd != "" {
+		emmc.PreEolDec = extCsdByteDec(extCsd, 267)
+		emmc.LifeADec = extCsdByteDec(extCsd, 268)
+		emmc.LifeBDec = extCsdByteDec(extCsd, 269)
+		emmc.PreEolText = preEolText(emmc.PreEolDec)
+		emmc.LifeAText = lifeUsedText(emmc.LifeADec)
+		emmc.LifeBText = lifeUsedText(emmc.LifeBDec)
+
+		// 取 SLC/MLC 较大值作为主磨损估算
+		emmc.LifeUsed = emmc.LifeADec
+		mainType := "SLC/TYP_A"
+		if emmc.LifeBDec > emmc.LifeUsed {
+			emmc.LifeUsed = emmc.LifeBDec
+			mainType = "MLC/TYP_B"
+		}
+
+		switch {
+		case emmc.LifeUsed <= 0:
+			emmc.LifeUsedPct = 0
+			emmc.LifeLeftPct = 100
+		case emmc.LifeUsed >= 11:
+			emmc.LifeUsedPct = 100
+			emmc.LifeLeftPct = 0
+		default:
+			emmc.LifeUsedPct = emmc.LifeUsed * 10
+			emmc.LifeLeftPct = 100 - emmc.LifeUsedPct
+		}
+
+		emmc.LifeText = fmt.Sprintf("约剩余%d%%，按%s较大磨损值估算；SLC:%d(%s) MLC:%d(%s)；预警:%s",
+			emmc.LifeLeftPct, mainType, emmc.LifeADec, emmc.LifeAText,
+			emmc.LifeBDec, emmc.LifeBText, emmc.PreEolText)
+		info.Health = emmcStatusByUsed(emmc.LifeUsed, emmc.PreEolDec)
+
+		// ── ext_csd 其它字段 ──
+		emmc.VersionRaw = extCsdByteHex(extCsd, 192)
+		verDec := extCsdByteDec(extCsd, 192)
+		versions := map[int]string{0: "4.0", 1: "4.1", 2: "4.2", 3: "4.3", 4: "4.4",
+			5: "4.41", 6: "4.5", 7: "5.0", 8: "5.01", 9: "5.1", 10: "5.1B"}
+		emmc.Version = "未知(0x" + emmc.VersionRaw + ")"
+		if v, ok := versions[verDec]; ok {
+			emmc.Version = v
+		}
+		// CMDQ(byte308)是 eMMC 5.1 新增特性，有 CMDQ + byte192=5.01 → 实际颗粒为 5.1
+		emmc.CmdqSupport = extCsdByteDec(extCsd, 308)
+		if verDec == 8 && emmc.CmdqSupport > 0 {
+			emmc.Version = "5.1"
+			emmc.VersionNote = "CMDQ支持，规范5.01→颗粒5.1"
+		}
+		emmc.DeviceType = "0x" + extCsdByteHex(extCsd, 196)
+		emmc.Boot1SizeKb = extCsdByteDec(extCsd, 226) * 128
+		emmc.Boot2SizeKb = extCsdByteDec(extCsd, 227) * 128
+		emmc.RpmbSizeKb = extCsdByteDec(extCsd, 222) * 128
+		emmc.ExtCsdHex = extCsd
+	} else {
+		// ext_csd 不可读时，尝试用 sysfs 的 pre_eol_info / life_time 兜底
+		if v := readSysfsAttr(dev.SysfsDir + "/pre_eol_info"); v != "" {
+			if d, err := strconv.Atoi(v); err == nil {
+				emmc.PreEolDec = d
+				emmc.PreEolText = preEolText(d)
+			}
+		}
+		if v := readSysfsAttr(dev.SysfsDir + "/life_time"); v != "" {
+			// life_time 格式 "0x0A 0x0A" 分别为 typ_a typ_b
+			fields := strings.Fields(v)
+			if len(fields) >= 1 {
+				if d, err := strconv.ParseInt(strings.TrimPrefix(fields[0], "0x"), 16, 32); err == nil {
+					emmc.LifeADec = int(d)
+					emmc.LifeAText = lifeUsedText(int(d))
+				}
+			}
+			if len(fields) >= 2 {
+				if d, err := strconv.ParseInt(strings.TrimPrefix(fields[1], "0x"), 16, 32); err == nil {
+					emmc.LifeBDec = int(d)
+					emmc.LifeBText = lifeUsedText(int(d))
+				}
+			}
+			emmc.LifeUsed = emmc.LifeADec
+			if emmc.LifeBDec > emmc.LifeUsed {
+				emmc.LifeUsed = emmc.LifeBDec
+			}
+			if emmc.LifeUsed > 0 && emmc.LifeUsed < 11 {
+				emmc.LifeUsedPct = emmc.LifeUsed * 10
+				emmc.LifeLeftPct = 100 - emmc.LifeUsedPct
+			} else if emmc.LifeUsed >= 11 {
+				emmc.LifeUsedPct = 100
+				emmc.LifeLeftPct = 0
+			}
+			info.Health = emmcStatusByUsed(emmc.LifeUsed, emmc.PreEolDec)
+		}
+	}
+
+	// ── 厂商/型号/序列号/生产日期：优先 sysfs 已解析字段，CID hex 作回退 ──
+	cidData := readSysfsAttr(dev.SysfsDir + "/cid")
+	emmc.CidRaw = cidData
+	// sysfs 已解析字段（内核从 CID 提取）
+	// manfid 格式 "0x0000d6"（高字节为 0），JEDEC MID 是低 1 字节，取末 2 字符
+	manfidRaw := strings.ToLower(strings.TrimPrefix(readSysfsAttr(dev.SysfsDir+"/manfid"), "0x"))
+	if len(manfidRaw) >= 2 {
+		emmc.Manufacturer = emmcManfName(manfidRaw[len(manfidRaw)-2:])
+	} else {
+		emmc.Manufacturer = emmcManfName(manfidRaw)
+	}
+	if pn := readSysfsAttr(dev.SysfsDir + "/name"); pn != "" {
+		emmc.Product = pn
+	} else if pn := readSysfsAttr(dev.SysfsDir + "/pname"); pn != "" {
+		emmc.Product = pn
+	}
+	emmc.OemID = readSysfsAttrHex(dev.SysfsDir + "/oemid")
+	emmc.SerialHex = readSysfsAttrHex(dev.SysfsDir + "/serial")
+	// eMMC 固件版本用 CID 里的 PRV 字段（1 字节），sysfs 的 fwrev 是 8 字节大端且多数颗粒全 0
+	emmc.FwRev = readSysfsAttrHex(dev.SysfsDir + "/prv")
+	emmc.MfgDate = readSysfsAttr(dev.SysfsDir + "/date")
+
+	// CID hex 回退：若 sysfs 字段为空，则从 CID 原始 hex 解析
+	if cidData != "" && len(cidData) >= 30 {
+		mid := cidData[0:2]
+		prdctHex := cidData[6:18]
+		if emmc.Manufacturer == "" || strings.HasPrefix(emmc.Manufacturer, "未知") {
+			emmc.Manufacturer = emmcChipName(mid, prdctHex)
+		}
+		if emmc.Product == "" {
+			emmc.Product = hex2ascii(prdctHex)
+			if emmc.Product == "" {
+				emmc.Product = prdctHex
+			}
+		}
+		if emmc.OemID == "" {
+			emmc.OemID = "0x" + cidData[4:6]
+		}
+		if emmc.SerialHex == "" {
+			emmc.SerialHex = "0x" + cidData[20:28]
+		}
+		if emmc.FwRev == "" {
+			emmc.FwRev = "0x" + cidData[18:20]
+		}
+		if emmc.MfgDate == "" {
+			emmc.MfgDate = cidMdt(cidData[28:30])
+		}
+	}
+
+	// 填充 StorageSmart 的通用字段，让前端既有框架也能显示
+	info.Model = emmc.Product
+	info.Firmware = emmc.FwRev
+	info.Serial = emmc.SerialHex
+
+	// 从 block 设备取容量
+	if dev.BlkName != "" {
+		if sizeData, err := os.ReadFile("/sys/block/" + dev.BlkName + "/size"); err == nil {
+			if sectors, err := strconv.ParseInt(strings.TrimSpace(string(sizeData)), 10, 64); err == nil && sectors > 0 {
+				info.Capacity = formatBytes(sectors * 512)
+			}
+		}
+	}
+
+	return info
+}
+
 func getSmartInfo(device string) StorageSmart {
+	// eMMC 设备（mmcblk*）smartctl 不支持，走 ext_csd 健康度检测
+	if strings.Contains(device, "mmcblk") {
+		return getEmmcHealth(device)
+	}
+
 	info := StorageSmart{Available: false}
 
 	out, err := exec.Command("smartctl", "-a", device).CombinedOutput()
