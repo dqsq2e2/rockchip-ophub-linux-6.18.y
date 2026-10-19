@@ -20,6 +20,18 @@ fmt_if() {
 	fi
 }
 
+# monitor: 轻量监测，供 cron 周期调用。仅比对当前 IP 与缓存，变化时才 refresh。
+# 避免每分钟生成完整 banner 文件；IP 未变化时几乎零开销。
+if [ "$mode" = monitor ]; then
+	cur="$(fmt_if eth0 WAN)$(fmt_if br0 LAN)"
+	stamp=/run/aiot-3588ied-issue.ip
+	if [ -r "$stamp" ] && [ "$cur" = "$(cat "$stamp" 2>/dev/null)" ]; then
+		exit 0
+	fi
+	echo "$cur" > "$stamp"
+	exec "$0" refresh
+fi
+
 line1=$(fmt_if eth0 WAN)
 line2=$(fmt_if br0 LAN)
 
@@ -77,6 +89,10 @@ mv "$tmpf" /etc/issue
 cp /etc/issue /etc/motd
 
 if [ "$mode" = refresh ]; then
+	# 智能刷新：只重启仍在 login 提示符等待且无人正在使用的 tty。
+	# - pidof getty 仅返回未登录的 tty（用户登录后 getty 被 login/shell 替换）
+	# - 串口 ttyS* 通过 case 过滤排除，不中断调试
+	# - 已登录会话因无 getty 进程而自然跳过，不会被踢出
 	for p in $(pidof getty); do
 		tty=$(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i ~ /^tty/) print $i}')
 		case "$tty" in
