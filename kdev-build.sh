@@ -26,7 +26,7 @@ make ARCH=arm64 \
   KBUILD_BUILD_USER="builder" \
   KBUILD_BUILD_HOST="kdevbuilder" \
   LOCALVERSION=-kdev \
-  aiot_3588ied_defconfig
+  aiot_3588a_defconfig
 
 # check kver
 KVER=$(make LOCALVERSION=-kdev kernelrelease)
@@ -42,7 +42,7 @@ make ARCH=arm64 \
   KBUILD_BUILD_USER="builder" \
   KBUILD_BUILD_HOST="kdevbuilder" \
   LOCALVERSION=-kdev \
-  rockchip/rk3588-aiot-3588ied.dtb \
+  rockchip/rk3588-aiot-3588a.dtb \
   -j$(nproc)
 
 make ARCH=arm64 \
@@ -117,13 +117,13 @@ trap cleanup EXIT
 mount recovery.img /mnt
 rmdir /mnt/lost+found || :
 
-cp -a ${WORKDIR}/arch/arm64/boot/dts/rockchip/rk3588-aiot-3588ied.dtb \
-  /mnt/rk3588-aiot-3588ied.dtb
+cp -a ${WORKDIR}/arch/arm64/boot/dts/rockchip/rk3588-aiot-3588a.dtb \
+  /mnt/rk3588-aiot-3588a.dtb
 cp -a kernel-uImage.lzma /mnt
 tee /mnt/recovery.conf <<'EOF'
 label RK3588 Linux recovery
     kernel kernel-uImage.lzma
-    fdt rk3588-aiot-3588ied.dtb
+    fdt rk3588-aiot-3588a.dtb
     append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 rootwait rw
 EOF
 umount /mnt

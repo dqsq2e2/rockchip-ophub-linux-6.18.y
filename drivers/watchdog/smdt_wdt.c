@@ -7,7 +7,7 @@
  * Init: disable (reg 0x32 = 0x00), enable (reg 0x32 = 0x01),
  *       set timeout (reg 0x51 = 0x33).
  *
- * Copyright (C) 2024 AIoT-3588IED
+ * Copyright (C) 2024 AIoT-3588A
  */
 
 #include <linux/bitops.h>
@@ -270,6 +270,6 @@ static struct i2c_driver smdt_wdt_driver = {
 };
 module_i2c_driver(smdt_wdt_driver);
 
-MODULE_AUTHOR("AIoT-3588IED");
+MODULE_AUTHOR("AIoT-3588A");
 MODULE_DESCRIPTION("SMDT MCU I2C Watchdog Driver");
 MODULE_LICENSE("GPL");

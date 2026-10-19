@@ -2586,7 +2586,15 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	struct pci_dev *dev;
 	u32 l;
 
-	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 60*1000))
+	/*
+	 * Limit RRS wait to 1s instead of the upstream 60s. On RK3588 PCIe
+	 * Gen3, when the downstream device is absent or link training is
+	 * unstable, the controller may return RRS (0xFFFF0001) completions.
+	 * The upstream 60s exponential backoff in pci_bus_wait_rrs() causes
+	 * RCU stalls (RCU_GP_WAIT_FQS starved for >20s). 1s is sufficient
+	 * for real devices to become ready while preventing the stall.
+	 */
+	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 1000))
 		return NULL;
 
 	dev = pci_alloc_dev(bus);

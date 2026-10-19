@@ -8,10 +8,10 @@ iptables -t nat -A POSTROUTING -s 192.168.98.0/24 -o br0 -j MASQUERADE
 /rkdev_arm64 &
 
 # 立即生成一版 banner（IP 可能还显示 DOWN），让 getty 秒起不被阻塞
-/usr/sbin/aiot-3588ied-issue
+/usr/sbin/aiot-3588a-issue
 
 # 后台异步等待网络就绪后刷新 banner（refresh 会重写 issue 并重启 tty1-6 的 getty）
-# 运行期间由 crond 每分钟执行 aiot-3588ied-issue monitor，IP 变化时自动刷新
+# 运行期间由 crond 每分钟执行 aiot-3588a-issue monitor，IP 变化时自动刷新
 (
 	i=0
 	while [ $i -lt 30 ]; do
@@ -22,7 +22,7 @@ iptables -t nat -A POSTROUTING -s 192.168.98.0/24 -o br0 -j MASQUERADE
 		sleep 1
 		i=$((i + 1))
 	done
-	/usr/sbin/aiot-3588ied-issue refresh
+	/usr/sbin/aiot-3588a-issue refresh
 ) &
 
 sync

@@ -2,7 +2,7 @@
 
 ## 问题现象
 
-在 RK3588 AIoT-3588IED 板卡上，当 Type-C 数据线被拔出后：
+在 RK3588 AIoT-3588A 板卡上，当 Type-C 数据线被拔出后：
 
 1. I2C6 总线挂起（所有 I2C6 设备通信失败，返回 `-110 ETIMEDOUT`）
 2. PCA9555 GPIO 扩展器失联 → PCIe3x4 PERST# 无法控制 → NVMe SSD 消失
@@ -110,7 +110,7 @@ static int rk_udphy_usb3_phy_init(struct phy *phy)
 
 #### 为什么 `dp-lane-mux = <0 1 2 3>` 是正确的
 
-AIoT-3588IED 板卡的 Type-C 接口通过 usbdp_phy0 连接，但硬件设计上
+AIoT-3588A 板卡的 Type-C 接口通过 usbdp_phy0 连接，但硬件设计上
 **所有 4 条 lane 都用于 DisplayPort**，USB3 SuperSpeed 信号不走 Type-C 通道。
 Type-C 端口仅支持 USB2.0（通过 u2phy0_otg → DWC3），不支持 USB3 SS。
 
