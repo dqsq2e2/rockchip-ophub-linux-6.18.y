@@ -11,16 +11,16 @@ iptables -t nat -A POSTROUTING -s 192.168.98.0/24 -o eth0 -j MASQUERADE
 
 # 后台异步等待网络就绪后刷新 banner（refresh 会重写 issue 并重启 tty1-6 的 getty）
 # 运行期间由 crond 每分钟执行 aiot-3588a-issue monitor，IP 变化时自动刷新
-(
-	i=0
-	while [ $i -lt 30 ]; do
-		eth0_up=0;
-		ip -4 -o addr show dev eth0 scope global 2>/dev/null | grep -q inet && eth0_up=1
-		[ $eth0_up -eq 1 ] && break
-		sleep 1
-		i=$((i + 1))
-	done
-	/usr/sbin/aiot-3588a-issue refresh
-) &
+
+i=0
+while [ $i -lt 10 ]; do
+	eth0_up=0;
+	ip -4 -o addr show dev eth0 scope global 2>/dev/null | grep -q inet && eth0_up=1
+	[ $eth0_up -eq 1 ] && break
+	sleep 1
+	i=$((i + 1))
+done
+/usr/sbin/aiot-3588a-issue refresh
 
 sync
+

@@ -18,5 +18,5 @@ ${SSH_CMD} "sync"
 ${SSH_CMD} "sync"
 ${SSH_CMD} "sync"
 
-#${SSH_CMD} tmux new-session -d -s reboot_session 'reboot -f'
+${SSH_CMD} tmux new-session -d -s reboot_session 'reboot -f'
 
