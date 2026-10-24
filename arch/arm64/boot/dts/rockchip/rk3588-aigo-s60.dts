@@ -243,9 +243,12 @@
 		vin-supply = <&vcc_3v3_s3>;
 	};
 
-	/* RTL8365MB switch (switch0): 5 user ports eth1..eth5.
+	/* RTL8365MB switch (switch0): 5 user ports (auto-named eth2..eth6).
 	 * CPU port @7 connects to gmac1 via RGMII. Bit-bang SMI on gpio4.
-	 * Pin mapping taken from the official 6.1 BSP device tree. */
+	 * Pin mapping taken from the official 6.1 BSP device tree.
+	 * Labels are omitted so the kernel auto-enumerates the slave ports
+	 * as eth2.. (after the GMAC masters eth0/eth1), avoiding the
+	 * -EEXIST name collision seen with fixed labels. */
 	switch0: switch0 {
 		compatible = "realtek,rtl8365mb";
 		mdc-gpios = <&gpio4 RK_PA6 GPIO_ACTIVE_HIGH>;
@@ -258,31 +261,26 @@
 
 			port@0 {
 				reg = <0>;
-				label = "eth1";
 				phy-handle = <&sw0_phy0>;
 			};
 
 			port@1 {
 				reg = <1>;
-				label = "eth2";
 				phy-handle = <&sw0_phy1>;
 			};
 
 			port@2 {
 				reg = <2>;
-				label = "eth3";
 				phy-handle = <&sw0_phy2>;
 			};
 
 			port@3 {
 				reg = <3>;
-				label = "eth4";
 				phy-handle = <&sw0_phy3>;
 			};
 
 			port@4 {
 				reg = <4>;
-				label = "eth5";
 				phy-handle = <&sw0_phy4>;
 			};
 
@@ -325,8 +323,8 @@
 		};
 	};
 
-	/* RTL8367RB switch (switch1): 5 user ports eth6..eth10.
-	 * CPU port @16 connects to gmac0 via RGMII. Bit-bang SMI on gpio4.
+	/* RTL8367RB switch (switch1): 5 user ports (auto-named eth7..eth11).
+	 * CPU port @7 connects to gmac0 via RGMII. Bit-bang SMI on gpio4.
 	 * The upstream rtl8365mb driver auto-detects the chip by id; a
 	 * matching compatible ("realtek,rtl8367rb") is added there. */
 	switch1: switch1 {
@@ -342,36 +340,35 @@
 
 			port@0 {
 				reg = <0>;
-				label = "eth6";
 				phy-handle = <&sw1_phy0>;
 			};
 
 			port@1 {
 				reg = <1>;
-				label = "eth7";
 				phy-handle = <&sw1_phy1>;
 			};
 
 			port@2 {
 				reg = <2>;
-				label = "eth8";
 				phy-handle = <&sw1_phy2>;
 			};
 
 			port@3 {
 				reg = <3>;
-				label = "eth9";
 				phy-handle = <&sw1_phy3>;
 			};
 
 			port@4 {
 				reg = <4>;
-				label = "eth10";
 				phy-handle = <&sw1_phy4>;
 			};
 
-			port@16 {
-				reg = <16>;
+			/* CPU port: upstream rtl8365mb caps at 11 ports (mask 0x07FF),
+			 * so port@16 (used by the Rockchip BSP) is rejected. The
+			 * RTL8367RB-VB RGMII extint is at physical port 7, which is a
+			 * valid index (< 11) and supports RGMII. */
+			port@7 {
+				reg = <7>;
 				ethernet = <&gmac0>;
 				phy-mode = "rgmii";
 

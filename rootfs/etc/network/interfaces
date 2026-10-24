@@ -1,12 +1,17 @@
 auto lo
 iface lo inet loopback
 
+# eth0/eth1 are DSA master (CPU conduit) interfaces for the two Realtek
+# switches. They must NOT carry an IP address. Leave them manual.
 auto eth0
 iface eth0 inet manual
 
 auto eth1
 iface eth1 inet manual
 
+# br0 is the management LAN address of the recovery/flash assistant.
+# Clients on any switch port reach the web UI here. DHCP on the user
+# ports (eth2..eth11) is handled by dhcpcd (see /etc/dhcpcd.conf).
 auto br0
 iface br0 inet static
     address 192.168.98.1
