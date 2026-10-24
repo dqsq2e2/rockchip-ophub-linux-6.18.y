@@ -6,5 +6,5 @@
 0	3	*	*	6	run-parts /etc/periodic/weekly
 0	5	1	*	*	run-parts /etc/periodic/monthly
 # 每分钟监测 IP 变化，仅在变化时刷新登录 banner（monitor 先比对缓存，未变化零开销）
-*	*	*	*	*	/usr/sbin/aiot-3588ied-issue monitor
+*	*	*	*	*	/usr/sbin/aigo-s60-issue monitor
 

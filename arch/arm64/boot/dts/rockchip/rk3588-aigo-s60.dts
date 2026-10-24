@@ -287,10 +287,34 @@
 	cpu-supply = <&vdd_cpu_big1_s0>;
 };
 
-/* Ethernet disabled — headless recovery doesn't need networking.
- * gmac may also try MSI via ITS. */
+/* GMAC1 ethernet — uses wired SPI interrupts (GIC_SPI 234/233), NOT MSI.
+ * Safe to enable even with ITS disabled. */
 &gmac1 {
-	status = "disabled";
+	clock_in_out = "output";
+	phy-mode = "rgmii-rxid";
+	tx_delay = <0x43>;
+	phy-handle = <&rgmii_phy1>;
+	local-mac-address = [00 e0 4c 68 00 01];
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&gmac1_miim
+		     &gmac1_tx_bus2
+		     &gmac1_rx_bus2
+		     &gmac1_rgmii_clk
+		     &gmac1_rgmii_bus>;
+	snps,reset-gpio = <&gpio3 RK_PB7 GPIO_ACTIVE_LOW>;
+	snps,reset-active-low;
+	snps,reset-delays-us = <0 20000 100000>;
+	status = "okay";
+
+	mdio {
+		rgmii_phy1: phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <1>;
+			motorcomm,led0-triggers = "activity";
+			motorcomm,led1-triggers = "link-10", "link-100", "link-1000";
+		};
+	};
 };
 
 &gpu {

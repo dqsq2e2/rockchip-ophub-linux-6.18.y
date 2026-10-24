@@ -141,6 +141,19 @@ cp -a recovery.img ${WORKDIR}/release/recovery_${TIMESTAMP}.img
 
 cp -a kernel-uImage.lzma ${WORKDIR}/release/kernel-uImage.lzma
 cp -a kernel-uImage.lzma ${WORKDIR}/release/kernel-uImage_${TIMESTAMP}.lzma
+
+# Generate recovery.conf for /hack/ directory (U-Boot reads from eMMC)
+# Paths are relative to partition root, so /hack/ prefix is needed
+tee ${WORKDIR}/release/recovery-hack.conf <<'EOF'
+label RK3588 Linux recovery
+    kernel /hack/kernel-uImage.lzma
+    fdt /hack/rk3588-aigo-s60.dtb
+    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 keep rw fw_devlink=off deferred_probe_timeout=1 initcall_debug no_console_suspend panic=1 loglevel=8
+EOF
+
+cp -a ${WORKDIR}/arch/arm64/boot/dts/rockchip/rk3588-aigo-s60.dtb \
+  ${WORKDIR}/release/rk3588-aigo-s60.dtb
+
 sync
 
 ls -alh ${WORKDIR}/release/*.img
