@@ -24,7 +24,7 @@ fmt_if() {
 # 避免每分钟生成完整 banner 文件；IP 未变化时几乎零开销。
 if [ "$mode" = monitor ]; then
 	cur="$(fmt_if eth0 WAN)$(fmt_if br0 LAN)"
-	stamp=/run/aiot-3588ied-issue.ip
+	stamp=/run/aigo-s60-issue.ip
 	if [ -r "$stamp" ] && [ "$cur" = "$(cat "$stamp" 2>/dev/null)" ]; then
 		exit 0
 	fi
@@ -72,7 +72,7 @@ cat >> "$tmpf" <<'ART'
   LINE1
   LINE2
   Default Account: root/root
-  Documentation: https://github.com/yifengyou/aiot-3588ied
+  Documentation: https://github.com/yifengyou/aigo-s60
 
   Copyright (C) 2026 RKdev. All rights reserved.
 ***************************************************************

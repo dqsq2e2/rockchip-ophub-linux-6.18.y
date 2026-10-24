@@ -271,15 +271,15 @@
 };
 
 &combphy0_ps {
-	status = "okay";
+	status = "disabled";
 };
 
 &combphy1_ps {
-	status = "okay";
+	status = "disabled";
 };
 
 &combphy2_psu {
-	status = "okay";
+	status = "disabled";
 };
 
 &cpu_l0 {
@@ -343,8 +343,25 @@
 };
 
 &gpu {
-	mali-supply = <&vdd_gpu_s0>;
-	status = "okay";
+	status = "disabled";
+};
+
+/* Disable ITS — RK3588001 erratum makes MSI allocation hang.
+ * Without ITS, all devices fall back to wired IRQs. */
+&its0 {
+	status = "disabled";
+};
+
+&its1 {
+	status = "disabled";
+};
+
+&mmu600_pcie {
+	status = "disabled";
+};
+
+&mmu600_php {
+	status = "disabled";
 };
 
 &av1d {
@@ -410,7 +427,7 @@
 	pinctrl-0 = <&hdmim1_tx1_cec &hdmim0_tx1_hpd
 		     &hdmim2_tx1_scl &hdmim2_tx1_sda &hdmi1_tx_on_h>;
 	pinctrl-names = "default";
-	status = "okay";
+	status = "disabled";
 };
 
 &hdmi1_in {
@@ -445,7 +462,7 @@
 };
 
 &hdptxphy1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &i2c0 {
@@ -677,10 +694,7 @@
 };
 
 &pcie2x1l0 {
-	reset-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_HIGH>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pcie2_0_rst &wifi_poweren>;
-	status = "okay";
+	status = "disabled";
 };
 
 &pcie2x1l1 {
@@ -688,20 +702,15 @@
 };
 
 &pcie2x1l2 {
-	reset-gpios = <&gpio1 RK_PB4 GPIO_ACTIVE_HIGH>;
-	/* YT6801 PCIe 网卡 eFuse 未烧录 MAC，此处指定固定 MAC 供驱动回退读取 */
-	local-mac-address = [00 e0 4c 68 00 02];
-	status = "okay";
+	status = "disabled";
 };
 
 &pcie30phy {
-	status = "okay";
+	status = "disabled";
 };
 
 &pcie3x4 {
-	reset-gpios = <&nca9555 15 GPIO_ACTIVE_HIGH>;
-	vpcie3v3-supply = <&vcc3v3_pcie30>;
-	status = "okay";
+	status = "disabled";
 };
 
 &pinctrl {
@@ -790,35 +799,13 @@
 	status = "okay";
 };
 
-&rknn_core_0 {
-	npu-supply = <&vdd_npu_s0>;
-	sram-supply = <&vdd_npu_s0>;
-	status = "okay";
-};
-
-&rknn_core_1 {
-	npu-supply = <&vdd_npu_s0>;
-	sram-supply = <&vdd_npu_s0>;
-	status = "okay";
-};
-
-&rknn_core_2 {
-	npu-supply = <&vdd_npu_s0>;
-	sram-supply = <&vdd_npu_s0>;
-	status = "okay";
-};
-
-&rknn_mmu_0 {
-	status = "okay";
-};
-
-&rknn_mmu_1 {
-	status = "okay";
-};
-
-&rknn_mmu_2 {
-	status = "okay";
-};
+/* NPU disabled — headless recovery doesn't need it */
+&rknn_core_0 { status = "disabled"; };
+&rknn_core_1 { status = "disabled"; };
+&rknn_core_2 { status = "disabled"; };
+&rknn_mmu_0 { status = "disabled"; };
+&rknn_mmu_1 { status = "disabled"; };
+&rknn_mmu_2 { status = "disabled"; };
 
 &saradc {
 	vref-supply = <&avcc_1v8_s0>;
@@ -848,7 +835,7 @@
 	max-frequency = <150000000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdiom0_pins>;
-	status = "okay";
+	status = "disabled";
 };
 
 &sdmmc {
@@ -861,7 +848,7 @@
 	sd-uhs-sdr104;
 	vmmc-supply = <&vcc3v3_sd_s0>;
 	vqmmc-supply = <&vccio_sd_s0>;
-	status = "okay";
+	status = "disabled";
 };
 
 /* optional on non-LTS, populated on LTS version */
@@ -886,8 +873,7 @@
 		interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&pmic_pins>, <&rk806_dvs1_null>,
-			    <&rk806_dvs2_null>, <&rk806_dvs3_null>;
+		pinctrl-0 = <&pmic_pins>;
 
 		system-power-controller;
 
@@ -901,29 +887,14 @@
 		vcc8-supply = <&vcc4v0_sys>;
 		vcc9-supply = <&vcc4v0_sys>;
 		vcc10-supply = <&vcc4v0_sys>;
-		vcc11-supply = <&vcc_2v0_pldo_s3>;
+		vcc11-supply = <&vcc4v0_sys>;
 		vcc12-supply = <&vcc4v0_sys>;
-		vcc13-supply = <&vcc_1v1_nldo_s3>;
-		vcc14-supply = <&vcc_1v1_nldo_s3>;
+		vcc13-supply = <&vcc4v0_sys>;
+		vcc14-supply = <&vcc4v0_sys>;
 		vcca-supply = <&vcc4v0_sys>;
 
 		gpio-controller;
 		#gpio-cells = <2>;
-
-		rk806_dvs1_null: dvs1-null-pins {
-			pins = "gpio_pwrctrl1";
-			function = "pin_fun0";
-		};
-
-		rk806_dvs2_null: dvs2-null-pins {
-			pins = "gpio_pwrctrl2";
-			function = "pin_fun0";
-		};
-
-		rk806_dvs3_null: dvs3-null-pins {
-			pins = "gpio_pwrctrl3";
-			function = "pin_fun0";
-		};
 
 		regulators {
 			vdd_gpu_s0: vdd_gpu_mem_s0: dcdc-reg1 {
@@ -1204,97 +1175,25 @@
 	status = "okay";
 };
 
-&u2phy0 {
-	status = "okay";
-};
-
-&u2phy0_otg {
-	status = "okay";
-};
-
-&u2phy1 {
-	status = "okay";
-};
-
-&u2phy1_otg {
-	status = "okay";
-	phy-supply = <&vcc5v0_host>;
-};
-
-&u2phy2 {
-	status = "okay";
-};
-
-&u2phy2_host {
-	status = "okay";
-	phy-supply = <&vcc5v0_host>;
-};
-
-&u2phy3 {
-	status = "okay";
-};
-
-&u2phy3_host {
-	status = "okay";
-	phy-supply = <&vcc5v0_host>;
-};
-
-&usbdp_phy0 {
-	orientation-switch;
-	sbu1-dc-gpios = <&gpio4 RK_PB1 GPIO_ACTIVE_HIGH>;
-	sbu2-dc-gpios = <&gpio0 RK_PD1 GPIO_ACTIVE_HIGH>;
-	status = "okay";
-
-	port {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		usbdp_phy0_typec_ss: endpoint@0 {
-			reg = <0>;
-			remote-endpoint = <&usbc0_ss>;
-		};
-	};
-};
-
-&usbdp_phy1 {
-	status = "okay";
-};
-
-&usb_host0_ehci {
-	status = "okay";
-};
-
-&usb_host0_ohci {
-	status = "okay";
-};
-
-&usb_host0_xhci {
-	usb-role-switch;
-	status = "okay";
-
-	port {
-		usb_host0_xhci_drd_sw: endpoint {
-			remote-endpoint = <&usbc0_hs>;
-		};
-	};
-};
-
-&usb_host1_xhci {
-	dr_mode = "host";
-	status = "okay";
-};
-
-&usb_host1_ehci {
-	status = "okay";
-};
-
-&usb_host1_ohci {
-	status = "okay";
-};
-
-&usb_host2_xhci {
-	status = "okay";
-};
+/* All USB disabled — headless recovery doesn't need USB.
+ * Also USB controllers use MSI via ITS which hangs on RK3588001 erratum. */
+&u2phy0 { status = "disabled"; };
+&u2phy0_otg { status = "disabled"; };
+&u2phy1 { status = "disabled"; };
+&u2phy1_otg { status = "disabled"; };
+&u2phy2 { status = "disabled"; };
+&u2phy2_host { status = "disabled"; };
+&u2phy3 { status = "disabled"; };
+&u2phy3_host { status = "disabled"; };
+&usbdp_phy0 { status = "disabled"; };
+&usbdp_phy1 { status = "disabled"; };
+&usb_host0_ehci { status = "disabled"; };
+&usb_host0_ohci { status = "disabled"; };
+&usb_host0_xhci { status = "disabled"; };
+&usb_host1_xhci { status = "disabled"; };
+&usb_host1_ehci { status = "disabled"; };
+&usb_host1_ohci { status = "disabled"; };
+&usb_host2_xhci { status = "disabled"; };
 
 &vop_mmu {
 	status = "okay";

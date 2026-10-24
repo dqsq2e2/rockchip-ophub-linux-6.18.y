@@ -101,7 +101,14 @@ ls -al recovery/kernel.lzma
 # generate recovery
 cd ${WORKDIR}/recovery
 dd if=/dev/zero of=recovery.img bs=1M count=63
-mkimage -A arm64 -O linux -T kernel -C lzma \
+
+# Compress kernel with LZMA
+xz --format=lzma -k -c ${WORKDIR}/arch/arm64/boot/Image >kernel.lzma
+
+# Use IH_TYPE_KERNEL_NOLOAD so U-Boot allocates a separate buffer
+# for decompression, avoiding in-place overwrite (85MB uncompressed
+# would corrupt the 47MB compressed stream at the same address)
+mkimage -A arm64 -O linux -T kernel_noload -C lzma \
   -a 0x40080000 -e 0x40080000 \
   -n "Recovery Kernel" \
   -d kernel.lzma kernel-uImage.lzma
@@ -124,7 +131,7 @@ tee /mnt/recovery.conf <<'EOF'
 label RK3588 Linux recovery
     kernel kernel-uImage.lzma
     fdt rk3588-aigo-s60.dtb
-    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 rootwait rw
+    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 keep rw fw_devlink=off deferred_probe_timeout=1 initcall_debug no_console_suspend panic=1 loglevel=8
 EOF
 umount /mnt
 sync
