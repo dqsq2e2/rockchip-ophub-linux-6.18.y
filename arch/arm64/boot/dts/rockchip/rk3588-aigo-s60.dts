@@ -20,8 +20,8 @@
 #include "rk3588.dtsi"
 
 / {
-	model = "AIoT 3588IED";
-	compatible = "rockchip,rk3588-aiot-3588ied", "rockchip,rk3588";
+	model = "Aigo S60";
+	compatible = "rockchip,rk3588-aigo-s60", "rockchip,rk3588";
 
 	aliases {
 		mmc0 = &sdhci;

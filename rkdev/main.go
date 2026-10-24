@@ -681,7 +681,7 @@ var ubootDefaultVars = map[string]string{
 	"button_cmd_0_name":  "Recovery key",
 	"cpu":                "armv8",
 	"fdt_addr_r":        "0x12000000",
-	"fdtfile":            "rockchip/rk3588-aiot-3588ied.dtb",
+	"fdtfile":            "rockchip/rk3588-aigo-s60.dtb",
 	"fdtoverlay_addr_r":  "0x12100000",
 	"kernel_addr_r":      "0x02000000",
 	"kernel_comp_addr_r": "0x0a000000",
@@ -3738,7 +3738,7 @@ func parseSmartAttrs(text string) []SmartAttr {
 // ============ Update Helper ============
 
 const (
-	githubReleaseAPI = "https://api.github.com/repos/yifengyou/aiot-3588ied/releases/tags/spi_recovery_uboot2026"
+	githubReleaseAPI = "https://api.github.com/repos/yifengyou/aigo-s60/releases/tags/spi_recovery_uboot2026"
 	updateTmpFile    = "/tmp/update.img"
 	updateTargetDev  = "/dev/mtdblock0"
 )
