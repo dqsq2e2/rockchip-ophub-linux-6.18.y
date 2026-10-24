@@ -3346,6 +3346,11 @@ const struct realtek_variant rtl8365mb_variant = {
 
 static const struct of_device_id rtl8365mb_of_match[] = {
 	{ .compatible = "realtek,rtl8365mb", .data = &rtl8365mb_variant, },
+	/* The RTL8367RB/RB-VB belongs to the same RTL8367C family and is
+	 * auto-detected by chip id in rtl8365mb_detect(). Accept the
+	 * compatible strings used by the Rockchip BSP device trees. */
+	{ .compatible = "realtek,rtl8367rb", .data = &rtl8365mb_variant, },
+	{ .compatible = "realtek,rtl8367rb-vb", .data = &rtl8365mb_variant, },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, rtl8365mb_of_match);

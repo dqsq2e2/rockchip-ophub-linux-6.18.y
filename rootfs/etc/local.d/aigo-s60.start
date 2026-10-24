@@ -7,6 +7,8 @@ iptables -t nat -A POSTROUTING -s 192.168.98.0/24 -o br0 -j MASQUERADE
 
 /rkdev_arm64 &
 
+exit 0
+
 # 立即生成一版 banner（IP 可能还显示 DOWN），让 getty 秒起不被阻塞
 /usr/sbin/aigo-s60-issue
 

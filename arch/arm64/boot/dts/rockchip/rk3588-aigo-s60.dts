@@ -27,7 +27,8 @@
 		mmc0 = &sdhci;
 		mmc1 = &sdmmc;
 		mmc2 = &sdio;
-		ethernet0 = &gmac1;
+		ethernet0 = &gmac0;
+		ethernet1 = &gmac1;
 	};
 
 	adc-keys-0 {
@@ -241,6 +242,172 @@
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&vcc_3v3_s3>;
 	};
+
+	/* RTL8365MB switch (switch0): 5 user ports eth1..eth5.
+	 * CPU port @7 connects to gmac1 via RGMII. Bit-bang SMI on gpio4.
+	 * Pin mapping taken from the official 6.1 BSP device tree. */
+	switch0: switch0 {
+		compatible = "realtek,rtl8365mb";
+		mdc-gpios = <&gpio4 RK_PA6 GPIO_ACTIVE_HIGH>;
+		mdio-gpios = <&gpio4 RK_PA7 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio4 RK_PC0 GPIO_ACTIVE_LOW>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				label = "eth1";
+				phy-handle = <&sw0_phy0>;
+			};
+
+			port@1 {
+				reg = <1>;
+				label = "eth2";
+				phy-handle = <&sw0_phy1>;
+			};
+
+			port@2 {
+				reg = <2>;
+				label = "eth3";
+				phy-handle = <&sw0_phy2>;
+			};
+
+			port@3 {
+				reg = <3>;
+				label = "eth4";
+				phy-handle = <&sw0_phy3>;
+			};
+
+			port@4 {
+				reg = <4>;
+				label = "eth5";
+				phy-handle = <&sw0_phy4>;
+			};
+
+			port@7 {
+				reg = <7>;
+				ethernet = <&gmac1>;
+				phy-mode = "rgmii";
+
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+		};
+
+		mdio {
+			compatible = "realtek,smi-mdio";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			sw0_phy0: ethernet-phy@0 {
+				reg = <0>;
+			};
+
+			sw0_phy1: ethernet-phy@1 {
+				reg = <1>;
+			};
+
+			sw0_phy2: ethernet-phy@2 {
+				reg = <2>;
+			};
+
+			sw0_phy3: ethernet-phy@3 {
+				reg = <3>;
+			};
+
+			sw0_phy4: ethernet-phy@4 {
+				reg = <4>;
+			};
+		};
+	};
+
+	/* RTL8367RB switch (switch1): 5 user ports eth6..eth10.
+	 * CPU port @16 connects to gmac0 via RGMII. Bit-bang SMI on gpio4.
+	 * The upstream rtl8365mb driver auto-detects the chip by id; a
+	 * matching compatible ("realtek,rtl8367rb") is added there. */
+	switch1: switch1 {
+		compatible = "realtek,rtl8367rb";
+		mdc-gpios = <&gpio4 RK_PA4 GPIO_ACTIVE_HIGH>;
+		mdio-gpios = <&gpio4 RK_PA5 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio4 RK_PB7 GPIO_ACTIVE_LOW>;
+		dsa,member = <1 1>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				label = "eth6";
+				phy-handle = <&sw1_phy0>;
+			};
+
+			port@1 {
+				reg = <1>;
+				label = "eth7";
+				phy-handle = <&sw1_phy1>;
+			};
+
+			port@2 {
+				reg = <2>;
+				label = "eth8";
+				phy-handle = <&sw1_phy2>;
+			};
+
+			port@3 {
+				reg = <3>;
+				label = "eth9";
+				phy-handle = <&sw1_phy3>;
+			};
+
+			port@4 {
+				reg = <4>;
+				label = "eth10";
+				phy-handle = <&sw1_phy4>;
+			};
+
+			port@16 {
+				reg = <16>;
+				ethernet = <&gmac0>;
+				phy-mode = "rgmii";
+
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+		};
+
+		mdio {
+			compatible = "realtek,smi-mdio";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			sw1_phy0: ethernet-phy@0 {
+				reg = <0>;
+			};
+
+			sw1_phy1: ethernet-phy@1 {
+				reg = <1>;
+			};
+
+			sw1_phy2: ethernet-phy@2 {
+				reg = <2>;
+			};
+
+			sw1_phy3: ethernet-phy@3 {
+				reg = <3>;
+			};
+
+			sw1_phy4: ethernet-phy@4 {
+				reg = <4>;
+			};
+		};
+	};
 };
 
 &combphy0_ps {
@@ -287,33 +454,49 @@
 	cpu-supply = <&vdd_cpu_big1_s0>;
 };
 
-/* GMAC1 ethernet — uses wired SPI interrupts (GIC_SPI 234/233), NOT MSI.
- * Safe to enable even with ITS disabled. */
+/* GMAC1 (fe1c0000) — DSA CPU port for switch0 (RTL8365MB, eth1..eth5).
+ * Uses wired SPI interrupts (GIC_SPI 234/233), NOT MSI, so it is safe
+ * to enable even with ITS disabled. No PHY is attached directly; the
+ * MAC links to the switch over RGMII with a fixed 1000M link.
+ * Matches the official 6.1 BSP topology. */
 &gmac1 {
 	clock_in_out = "output";
-	phy-mode = "rgmii-rxid";
-	tx_delay = <0x43>;
-	phy-handle = <&rgmii_phy1>;
-	local-mac-address = [00 e0 4c 68 00 01];
+	phy-mode = "rgmii";
+	tx_delay = <0x4f>;
+	rx_delay = <0x0f>;
 
 	pinctrl-names = "default";
-	pinctrl-0 = <&gmac1_miim
-		     &gmac1_tx_bus2
+	pinctrl-0 = <&gmac1_tx_bus2
 		     &gmac1_rx_bus2
 		     &gmac1_rgmii_clk
 		     &gmac1_rgmii_bus>;
-	snps,reset-gpio = <&gpio3 RK_PB7 GPIO_ACTIVE_LOW>;
-	snps,reset-active-low;
-	snps,reset-delays-us = <0 20000 100000>;
 	status = "okay";
 
-	mdio {
-		rgmii_phy1: phy@1 {
-			compatible = "ethernet-phy-ieee802.3-c22";
-			reg = <1>;
-			motorcomm,led0-triggers = "activity";
-			motorcomm,led1-triggers = "link-10", "link-100", "link-1000";
-		};
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
+	};
+};
+
+/* GMAC0 (fe1b0000) — DSA CPU port for switch1 (RTL8367RB, eth6..eth10).
+ * Uses wired SPI interrupts (GIC_SPI 227/226), NOT MSI. Like gmac1, the
+ * MAC links to the switch over RGMII with a fixed 1000M link. */
+&gmac0 {
+	clock_in_out = "output";
+	phy-mode = "rgmii";
+	tx_delay = <0x4f>;
+	rx_delay = <0x0f>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&gmac0_tx_bus2
+		     &gmac0_rx_bus2
+		     &gmac0_rgmii_clk
+		     &gmac0_rgmii_bus>;
+	status = "okay";
+
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
 	};
 };
 
