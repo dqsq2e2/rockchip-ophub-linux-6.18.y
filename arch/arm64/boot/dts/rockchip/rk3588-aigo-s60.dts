@@ -31,6 +31,8 @@
 		ethernet1 = &gmac1;
 	};
 
+	/* ADC keys on saradc channel 1, matching the official 6.1 BSP.
+	 * The official DT configures only a vol-up key (threshold 1758μV). */
 	adc-keys-0 {
 		compatible = "adc-keys";
 		io-channels = <&saradc 1>;
@@ -41,25 +43,7 @@
 		vol-up-key {
 			label = "volume up";
 			linux,code = <KEY_VOLUMEUP>;
-			press-threshold-microvolt = <175800>;
-		};
-
-		vol-down-key {
-			label = "volume down";
-			linux,code = <KEY_VOLUMEDOWN>;
-			press-threshold-microvolt = <417000>;
-		};
-
-		menu-key {
-			label = "menu";
-			linux,code = <KEY_MENU>;
-			press-threshold-microvolt = <890000>;
-		};
-
-		back-key {
-			label = "back";
-			linux,code = <KEY_BACK>;
-			press-threshold-microvolt = <1235000>;
+			press-threshold-microvolt = <1750>;
 		};
 	};
 
@@ -87,25 +71,6 @@
 				remote-endpoint = <&hdmi1_out_con>;
 			};
 		};
-	};
-
-	gpio-keys {
-		compatible = "gpio-keys";
-		autorepeat;
-
-		recovery {
-			debounce-interval = <100>;
-			gpios = <&gpio1 RK_PB1 GPIO_ACTIVE_LOW>;
-			label = "GPIO RECOVERY";
-			linux,code = <KEY_F8>;
-		};
-	};
-
-	ir-receiver {
-		compatible = "gpio-ir-receiver";
-		gpios = <&gpio0 RK_PD4 GPIO_ACTIVE_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&ir_receiver_pin>;
 	};
 
 	/* LEDs on gpio1 (gpio@fec20000), matching the official 6.1 BSP.
@@ -871,24 +836,6 @@
 	hdmirx {
 		hdmirx_hpd: hdmirx-5v-detection {
 			rockchip,pins = <1 RK_PD5 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
-	headphone {
-		hp_det: hp-det {
-			rockchip,pins = <4 RK_PC2 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
-	hym8563 {
-		hym8563_int: hym8563-int {
-			rockchip,pins = <0 RK_PB0 RK_FUNC_GPIO &pcfg_pull_up>;
-		};
-	};
-
-	ir-receiver {
-		ir_receiver_pin: ir-receiver-pin {
-			rockchip,pins = <0 RK_PD4 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
