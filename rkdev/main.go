@@ -662,7 +662,7 @@ func handleBootOrder(w http.ResponseWriter, r *http.Request) {
 const (
 	mtdblockPath = "/dev/mmcblk0"
 	fwEnvConfig  = "/etc/fw_env.config"
-	fwEnvContent = "/dev/mmcblk0 0x500000 0x10000 0x10000"
+	fwEnvContent = "# no env"
 )
 
 var ubootDefaultVars = map[string]string{

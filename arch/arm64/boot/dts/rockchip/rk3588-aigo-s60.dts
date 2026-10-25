@@ -497,18 +497,59 @@
 	};
 };
 
+/* Use a single RX/TX queue on both GMAC CPU ports, matching the official
+ * 6.1 BSP. The inherited rk3588 dtsi configures 2 queues, which leaves
+ * TX queue 1 stalled on gmac0 and triggers the NETDEV WATCHDOG /
+ * "Failed to reset the dma" loop. With rx/tx-queues-to-use = <1> only
+ * queue 0 is used and the watchdog no longer fires. */
+&gmac0_mtl_rx_setup {
+	snps,rx-queues-to-use = <1>;
+};
+
+&gmac0_mtl_tx_setup {
+	snps,tx-queues-to-use = <1>;
+};
+
+&gmac1_mtl_rx_setup {
+	snps,rx-queues-to-use = <1>;
+};
+
+&gmac1_mtl_tx_setup {
+	snps,tx-queues-to-use = <1>;
+};
+
 &gpu {
 	status = "disabled";
 };
 
-/* Disable ITS — RK3588001 erratum makes MSI allocation hang.
- * Without ITS, all devices fall back to wired IRQs. */
+/* Re-enable ITS to match the official 6.1 BSP. The official kernel runs
+ * with both ITS nodes enabled and no MSI hangs, so the RK3588001 erratum
+ * does not affect this board. Keeping ITS disabled was found to correlate
+ * with gmac0's SPI 227 interrupt never being delivered (eth1 IRQ count
+ * stuck at 0, DMA watchdog loop), while the official kernel with ITS
+ * enabled sees SPI 227 fire normally.
+ * Also add dma-coherent to match the official DT (which has neither
+ * dma-coherent nor dma-noncoherent, i.e. default coherent). The upstream
+ * 6.18 rk3588 dtsi sets dma-noncoherent, forcing non-shareable ITS memory
+ * which can break MSI; dma-coherent overrides that. */
 &its0 {
-	status = "disabled";
+	status = "okay";
+	dma-coherent;
 };
 
 &its1 {
-	status = "disabled";
+	status = "okay";
+	dma-coherent;
+};
+
+/* Match the official 6.1 BSP: the GIC node there has no mbi-alias /
+ * mbi-ranges / msi-controller properties, so the gic-v3-mbi MSI domain
+ * is never created. The upstream 6.18 rk3588 dtsi adds mbi-ranges=<424 56>
+ * which enables MBI; override it to an empty range so mbi_init() bails out
+ * and does not register a competing MSI domain. Wired SPIs (including
+ * gmac0 SPI 227) then behave exactly as on the official BSP. */
+&gic {
+	mbi-ranges = <0 0>;
 };
 
 &mmu600_pcie {

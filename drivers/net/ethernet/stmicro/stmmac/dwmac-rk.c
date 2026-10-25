@@ -21,7 +21,10 @@
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 #include <linux/pm_runtime.h>
+#include <linux/iopoll.h>
 
+#include "stmmac.h"
+#include "dwmac4_dma.h"
 #include "stmmac_platform.h"
 
 struct rk_priv_data;
@@ -1371,6 +1374,71 @@ static int rk_gmac_check_ops(struct rk_priv_data *bsp_priv)
 	return 0;
 }
 
+/* rk_dwmac_fix_reset - SoC-specific DMA reset for Rockchip gmac.
+ *
+ * On several Rockchip SoCs (observed on RK3588 gmac0/fe1b0000), the Synopsys
+ * DWMAC4 DMA software reset (DMA_BUS_MODE.SFT_RESET, bit 0 of register
+ * 0x1000) never self-clears, which makes stmmac_reset() time out with
+ * "Failed to reset the dma" and leaves the DMA engine in a stuck state so
+ * that no TX descriptors ever complete (NETDEV WATCHDOG loop, eth1 IRQ count
+ * permanently 0).
+ *
+ * The reliable way to recover is to pulse the SoC CRU hardware reset
+ * (plat->stmmac_rst, the "stmmaceth" reset = SRST_A_GMACx) which resets the
+ * whole MAC/DMA block, then retry the DMA software reset which now clears
+ * correctly because the DMA logic has been brought back to a clean state.
+ *
+ * This is wired through plat->fix_soc_reset so stmmac_reset() calls us
+ * instead of the plain dwmac4_dma_reset() that gets stuck.
+ */
+static int rk_dwmac_fix_reset(struct stmmac_priv *priv)
+{
+	struct plat_stmmacenet_data *plat = priv->plat;
+	void __iomem *ioaddr = priv->ioaddr;
+	u32 value;
+	int ret;
+
+	/* On several Rockchip SoCs (observed on RK3588 gmac0/fe1b0000), the
+	 * DWMAC4 DMA software reset (DMA_BUS_MODE.SFT_RESET) is unreliable:
+	 * stmmac_reset() reports "Failed to reset the dma" and then proceeds
+	 * to initialise the DMA channels while the engine is in a half-reset
+	 * state, leaving the TX path permanently stuck (NETDEV WATCHDOG loop,
+	 * eth1 IRQ count 0, tx_packets 0).
+	 *
+	 * The robust fix is to use the SoC CRU hardware reset
+	 * (plat->stmmac_rst = SRST_A_GMACx, the "stmmaceth" reset) which
+	 * resets the whole MAC/DMA block, and treat THAT as the reset. We do
+	 * NOT use the DMA_BUS_MODE.SFT_RESET bit at all — its self-clear
+	 * polling is the part that fails on this hardware. After the CRU
+	 * reset the DMA block is in a clean state and the stmmac driver can
+	 * safely continue with channel configuration.
+	 */
+	if (plat->stmmac_rst && !IS_ERR(plat->stmmac_rst)) {
+		reset_control_assert(plat->stmmac_rst);
+		udelay(100);
+		reset_control_deassert(plat->stmmac_rst);
+		/* Give the MAC/DMA block time to come out of reset before
+		 * stmmac_init_dma_engine starts writing DMA registers.
+		 */
+		usleep_range(2000, 4000);
+		return 0;
+	}
+
+	/* Fallback: no CRU reset available — use the standard DMA software
+	 * reset with a generous timeout (the bit self-clears, just slowly).
+	 */
+	value = readl(ioaddr + DMA_BUS_MODE);
+	value |= DMA_BUS_MODE_SFT_RESET;
+	writel(value, ioaddr + DMA_BUS_MODE);
+
+	ret = readl_poll_timeout(ioaddr + DMA_BUS_MODE, value,
+				 !(value & DMA_BUS_MODE_SFT_RESET),
+				 10000, 2000000);
+	if (ret)
+		netdev_warn(priv->dev, "DMA SFT_RESET timed out\n");
+	return ret;
+}
+
 static int rk_gmac_powerup(struct rk_priv_data *bsp_priv)
 {
 	struct device *dev = bsp_priv->dev;
@@ -1604,6 +1672,11 @@ static int rk_gmac_probe(struct platform_device *pdev)
 	plat_dat->exit = rk_gmac_exit;
 	plat_dat->suspend = rk_gmac_suspend;
 	plat_dat->resume = rk_gmac_resume;
+	/* Use the Rockchip-specific DMA reset that pulses the CRU hardware
+	 * reset (SRST_A_GMACx) before the DMA software reset, to recover from
+	 * the SFT_RESET self-clear failure seen on RK3588 gmac0.
+	 */
+	plat_dat->fix_soc_reset = rk_dwmac_fix_reset;
 
 	plat_dat->bsp_priv = rk_gmac_setup(pdev, plat_dat, data);
 	if (IS_ERR(plat_dat->bsp_priv))

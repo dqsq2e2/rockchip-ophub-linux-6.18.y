@@ -131,7 +131,7 @@ tee /mnt/recovery.conf <<'EOF'
 label RK3588 Linux recovery
     kernel kernel-uImage.lzma
     fdt rk3588-aigo-s60.dtb
-    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 keep rw fw_devlink=off deferred_probe_timeout=1 initcall_debug no_console_suspend panic=1 loglevel=8
+    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 keep rw fw_devlink=off deferred_probe_timeout=1 initcall_debug no_console_suspend panic=1 loglevel=8 irqchip.gicv3_pseudo_nmi=0 irqchip.gicv3_nolpi=1
 EOF
 umount /mnt
 sync
@@ -148,7 +148,7 @@ tee ${WORKDIR}/release/recovery-hack.conf <<'EOF'
 label RK3588 Linux recovery
     kernel /hack/kernel-uImage.lzma
     fdt /hack/rk3588-aigo-s60.dtb
-    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 keep rw fw_devlink=off deferred_probe_timeout=1 initcall_debug no_console_suspend panic=1 loglevel=8
+    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 keep rw fw_devlink=off deferred_probe_timeout=1 initcall_debug no_console_suspend panic=1 loglevel=8 irqchip.gicv3_pseudo_nmi=0 irqchip.gicv3_nolpi=1
 EOF
 
 cp -a ${WORKDIR}/arch/arm64/boot/dts/rockchip/rk3588-aigo-s60.dtb \
