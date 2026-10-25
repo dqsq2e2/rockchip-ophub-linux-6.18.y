@@ -98,6 +98,7 @@
 #include <linux/mii.h>
 #include <linux/mutex.h>
 #include <linux/of_irq.h>
+#include <linux/of_net.h>
 #include <linux/regmap.h>
 #include <linux/if_bridge.h>
 #include <linux/if_vlan.h>
@@ -114,7 +115,7 @@
 #define RTL8365MB_PHYADDRMAX		7
 #define RTL8365MB_NUM_PHYREGS		32
 #define RTL8365MB_PHYREGMAX		(RTL8365MB_NUM_PHYREGS - 1)
-#define RTL8365MB_MAX_NUM_PORTS		11
+#define RTL8365MB_MAX_NUM_PORTS		20
 /* Valid for the whole family except RTL8370B, which has 4160 entries.
  * RTL8370B is mentioned in vendor code but it might not even belong
  * to the same RTL8367C family.
@@ -3156,6 +3157,193 @@ static int rtl8365mb_setup(struct dsa_switch *ds)
 	ret = rtl8365mb_cpu_config(priv);
 	if (ret)
 		goto out_teardown_irq;
+
+	/* Early RGMII configuration for the CPU port(s).
+	 *
+	 * The stmmac DMA software reset (DMA_BUS_MODE.SFT_RESET) that runs
+	 * during stmmac_open() → stmmac_hw_setup() → stmmac_init_dma_engine()
+	 * requires the RGMII receive clock to be running on the GMAC side,
+	 * otherwise the SFT_RESET bit never self-clears and the DMA engine
+	 * is left permanently stuck in reset (CUR_TX_DESC = 0, no descriptor
+	 * fetches, NETDEV WATCHDOG loop).
+	 *
+	 * On this board the GMAC RX clock is supplied by the switch chip's
+	 * RGMII external interface (extint). The extint only starts outputting
+	 * the clock once it is configured for RGMII mode via
+	 * rtl8365mb_ext_config_rgmii(). Upstream, that configuration is
+	 * deferred to phylink_mac_config(), which runs AFTER stmmac_open() —
+	 * too late for the DMA reset.
+	 *
+	 * Configure the RGMII extint for the CPU port here, during switch
+	 * setup (which runs during DSA probe, before the conduit netdev is
+	 * opened), so that the RX clock is already running when stmmac
+	 * performs its DMA reset. This mirrors what the official Rockchip
+	 * BSP's proprietary rtl_api driver does (it configures the switch
+	 * CPU port RGMII before the GMAC is opened).
+	 */
+	dsa_switch_for_each_cpu_port(dp, ds) {
+		phy_interface_t interface;
+		int err;
+
+		err = of_get_phy_mode(dp->dn, &interface);
+		if (err) {
+			dev_dbg(priv->dev,
+				"CPU port %d: no phy-mode in DT, skipping early RGMII config\n",
+				dp->index);
+			continue;
+		}
+
+		if (!phy_interface_mode_is_rgmii(interface))
+			continue;
+
+		err = rtl8365mb_ext_config_rgmii(priv, dp->index, interface);
+		if (err) {
+			dev_warn(priv->dev,
+				 "early RGMII config for CPU port %d failed: %pe\n",
+				 dp->index, ERR_PTR(err));
+			/* Non-fatal: phylink_mac_config will retry later. */
+		} else {
+			dev_info(priv->dev,
+				 "early RGMII config for CPU port %d (%s)\n",
+				 dp->index, phy_modes(interface));
+		}
+
+		/* Force the CPU port's RGMII link up at 1Gbps/full-duplex so
+		 * that the switch chip starts outputting the RGMII receive
+		 * clock immediately. Without this, the extint is configured
+		 * for RGMII mode but the link remains down and no RX clock is
+		 * generated, which leaves the GMAC DMA SFT_RESET unable to
+		 * self-clear during stmmac_open(). The fixed-link speed/duplex
+		 * (1000/full) from the DT is used, matching the phylink
+		 * resolved configuration that phylink_mac_link_up() would
+		 * later program.
+		 */
+		err = rtl8365mb_ext_config_forcemode(priv, dp->index, true,
+						     SPEED_1000, DUPLEX_FULL,
+						     false, false);
+		if (err) {
+			dev_warn(priv->dev,
+				 "early force-link for CPU port %d failed: %pe\n",
+				 dp->index, ERR_PTR(err));
+		} else {
+			dev_info(priv->dev,
+				 "early force-link 1Gbps/full on CPU port %d\n",
+				 dp->index);
+		}
+
+		/* Additional RGMII physical-layer configuration that the
+		 * upstream rtl8365mb driver does not perform but the
+		 * Rockchip BSP rtl8367b driver does in
+		 * rtl8367b_extif_set_mode().
+		 *
+		 * The BSP writes CHIP_DEBUG0/1 registers for extif id <= 1
+		 * (extint 0 and 1), and CHIP_DEBUG2 for extif id > 1 (extint 2).
+		 * These configure the physical RGMII driver strength and
+		 * slew rate for the external interface.
+		 *
+		 * For extint 1 (id=1):
+		 *   CHIP_DEBUG0 (0x1303): SEL33(1)=BIT(9), DRI_RG(1)=BIT(6),
+		 *     clear DRI(1)=BIT(4), clear SLR(1)=BIT(1)
+		 *   CHIP_DEBUG1 (0x1304): DN(1)=7 at bits 15:12, DP(1)=7 at
+		 *     bits 11:8
+		 *
+		 * For extint 2 (id=2):
+		 *   CHIP_DEBUG2 (0x13E2): DRI_EXT2_RG=BIT(2), SLR_EXT2,
+		 *     RG2_DN=7 at bits 8:6, RG2_DP=7 at bits 5:3
+		 *
+		 * The TOP_CON0 MAC7_SEL_EXT1 and SDS1_DISABLE writes are
+		 * ONLY for RTL8367S_VB (chip_ver 0x00A0), NOT for
+		 * RTL8367RB-VB (chip_ver 0x0020). The official BSP applies
+		 * them only in the RTL8367S_VB-specific code path.
+		 *
+		 * Determine which extint the CPU port uses and write the
+		 * corresponding CHIP_DEBUG registers.
+		 */
+		{
+			int cpu_extint_id = -1;
+			int i;
+
+			for (i = 0; i < RTL8365MB_MAX_NUM_EXTINTS; i++) {
+				if (mb->chip_info->extints[i].port == dp->index) {
+					cpu_extint_id = mb->chip_info->extints[i].id;
+					break;
+				}
+			}
+
+			if (cpu_extint_id == 0 || cpu_extint_id == 1) {
+				u32 dbg0, dbg1;
+				int id = cpu_extint_id;
+
+				/* CHIP_DEBUG0: SEL33(id), DRI_RG(id), clear DRI(id), clear SLR(id) */
+				regmap_read(priv->map, 0x1303, &dbg0);
+				dbg0 |= BIT(8 + id);   /* SEL33 */
+				dbg0 |= BIT(5 + id);   /* DRI_RG */
+				dbg0 &= ~BIT(3 + id);  /* clear DRI */
+				dbg0 &= ~BIT(id);      /* clear SLR */
+				regmap_write(priv->map, 0x1303, dbg0);
+
+				/* CHIP_DEBUG1: DN(id)=7, DP(id)=7 */
+				regmap_read(priv->map, 0x1304, &dbg1);
+				dbg1 &= ~(0x7 << (4 + id * 8));   /* clear DN */
+				dbg1 &= ~(0x7 << (id * 8));       /* clear DP */
+				dbg1 |= (7 << (4 + id * 8));      /* DN=7 */
+				dbg1 |= (7 << (id * 8));          /* DP=7 */
+				regmap_write(priv->map, 0x1304, dbg1);
+
+				dev_info(priv->dev,
+					 "BSP extint %d: CHIP_DEBUG0/1 RGMII physical config\n",
+					 id);
+			} else if (cpu_extint_id == 2) {
+				u32 dbg2;
+
+				/* CHIP_DEBUG2: DRI_EXT2_RG, SLR_EXT2, RG2_DN=7, RG2_DP=7 */
+				regmap_read(priv->map, 0x13E2, &dbg2);
+				dbg2 |= BIT(2);       /* DRI_EXT2_RG */
+				dbg2 &= ~BIT(1);      /* clear DRI_EXT2 */
+				dbg2 &= ~BIT(0);      /* SLR_EXT2 (bit 0) */
+				dbg2 &= ~(0x7 << 6);  /* clear RG2_DN */
+				dbg2 &= ~(0x7 << 3);  /* clear RG2_DP */
+				dbg2 |= (7 << 6);     /* RG2_DN=7 */
+				dbg2 |= (7 << 3);     /* RG2_DP=7 */
+				regmap_write(priv->map, 0x13E2, dbg2);
+
+				dev_info(priv->dev,
+					 "BSP extint 2: CHIP_DEBUG2 RGMII physical config\n");
+			}
+		}
+
+		/* Dump key RGMII-related switch registers for debugging.
+		 * This helps compare the register state with the official
+		 * BSP driver to identify missing configuration steps.
+		 * Read all three extint's EXT_RGMXF and FORCE registers.
+		 */
+		{
+			u32 dbg0, dbg1, dbg2, dis, dis2, top_con0, sds1;
+			u32 ext_rgmxf0, ext_rgmxf1, ext_rgmxf2;
+			u32 force0, force1, force2, cpu_mask;
+
+			regmap_read(priv->map, 0x1303, &dbg0);
+			regmap_read(priv->map, 0x1304, &dbg1);
+			regmap_read(priv->map, 0x13E2, &dbg2);
+			regmap_read(priv->map, 0x1305, &dis);
+			regmap_read(priv->map, 0x13C3, &dis2);
+			regmap_read(priv->map, 0x1D70, &top_con0);
+			regmap_read(priv->map, 0x1D78, &sds1);
+			regmap_read(priv->map, 0x1306, &ext_rgmxf0);
+			regmap_read(priv->map, 0x1307, &ext_rgmxf1);
+			regmap_read(priv->map, 0x13C5, &ext_rgmxf2);
+			regmap_read(priv->map, 0x1310, &force0);
+			regmap_read(priv->map, 0x1311, &force1);
+			regmap_read(priv->map, 0x13C4, &force2);
+			regmap_read(priv->map, 0x1219, &cpu_mask);
+
+			dev_info(priv->dev,
+				 "RGMII regs: DBG0=0x%04x DBG1=0x%04x DBG2=0x%04x DIS=0x%04x DIS2=0x%04x TOP_CON0=0x%04x SDS1=0x%04x EXT_RGMXF[0,1,2]=0x%04x,0x%04x,0x%04x FORCE[0,1,2]=0x%04x,0x%04x,0x%04x CPU_MASK=0x%04x\n",
+				 dbg0, dbg1, dbg2, dis, dis2, top_con0, sds1,
+				 ext_rgmxf0, ext_rgmxf1, ext_rgmxf2,
+				 force0, force1, force2, cpu_mask);
+		}
+	}
 
 	ret = rtl8365mb_port_change_mtu(ds, cpu->trap_port, ETH_DATA_LEN);
 	if (ret)

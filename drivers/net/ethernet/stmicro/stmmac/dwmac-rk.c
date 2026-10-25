@@ -107,6 +107,7 @@ struct rk_priv_data {
 	struct clk *clk_phy;
 
 	struct reset_control *phy_reset;
+	struct reset_control *stmmac_rst;
 
 	int tx_delay;
 	int rx_delay;
@@ -1003,10 +1004,13 @@ static void rk3588_set_to_rgmii(struct rk_priv_data *bsp_priv,
 				int tx_delay, int rx_delay)
 {
 	u32 offset_con, id = bsp_priv->id;
+	u32 php_con0, php_clk_con1;
 
 	offset_con = bsp_priv->id == 1 ? RK3588_GRF_GMAC_CON9 :
 					 RK3588_GRF_GMAC_CON8;
 
+	/* sys_grf: enable RX/TX clock delay and program delay values.
+	 * This is what the upstream 6.18 driver does. */
 	regmap_write(bsp_priv->grf, RK3588_GRF_GMAC_CON7,
 		     RK3588_GMAC_RXCLK_DLY_ENABLE(id) |
 		     RK3588_GMAC_TXCLK_DLY_ENABLE(id));
@@ -1014,6 +1018,42 @@ static void rk3588_set_to_rgmii(struct rk_priv_data *bsp_priv,
 	regmap_write(bsp_priv->grf, offset_con,
 		     RK3588_GMAC_CLK_RX_DL_CFG(rx_delay) |
 		     RK3588_GMAC_CLK_TX_DL_CFG(tx_delay));
+
+	/* php_grf: configure the RGMII clock path in the PHP (PCIe/HP) GRF.
+	 *
+	 * The official Rockchip 6.1 BSP's rk3588_set_to_rgmii() writes to
+	 * BOTH sys_grf (CON7/CON8/CON9, as above) AND php_grf (CON0 at 0x08,
+	 * CLK_CON1 at 0x70). The upstream 6.18 driver only writes to sys_grf,
+	 * which leaves gmac0's RGMII receive clock path unconfigured in the
+	 * php_grf. Without this, the RGMII RX clock never reaches the GMAC
+	 * DMA block, and the DMA software reset (DMA_BUS_MODE.SFT_RESET)
+	 * cannot self-clear — the DMA engine stays permanently stuck in
+	 * reset, no TX descriptors are fetched, and the netdev watchdog
+	 * loops forever (tx_packets=0, IRQ count=0).
+	 *
+	 * gmac1 works without php_grf because its RGMII clock path only goes
+	 * through sys_grf. gmac0's RGMII clock path goes through php_grf,
+	 * which is why only gmac0 is broken on 6.18.
+	 *
+	 * The bit layout in php_grf CON0 (offset 0x08), decoded from the
+	 * official BSP disassembly:
+	 *   - RX delay enable value: bit (id*6 + 3)
+	 *   - RX delay enable WE:    bit (id*6 + 19)  [= value + 16]
+	 *   - TX delay enable WE:    bit (id*6 + 20)  [clears TX delay en]
+	 *   - mode bit WE:           bit (id*6 + 21)  [clears mode bit]
+	 * The TX delay and mode bits are cleared (WE set, value not set),
+	 * meaning php_grf handles RX delay enable only; TX delay is handled
+	 * by sys_grf.
+	 *
+	 * The php_grf CLK_CON1 (offset 0x70) write clears bit (id*5):
+	 *   - WE for bit (id*5): bit (id*5 + 16)
+	 */
+	php_con0 = BIT(id * 6 + 3) | BIT(id * 6 + 19) |
+		   BIT(id * 6 + 20) | BIT(id * 6 + 21);
+	php_clk_con1 = BIT(id * 5 + 16);
+
+	regmap_write(bsp_priv->php_grf, RK3588_GRF_GMAC_CON0, php_con0);
+	regmap_write(bsp_priv->php_grf, RK3588_GRF_CLK_CON1, php_clk_con1);
 }
 
 static const struct rk_gmac_ops rk3588_ops = {
@@ -1231,6 +1271,7 @@ static struct rk_priv_data *rk_gmac_setup(struct platform_device *pdev,
 
 	bsp_priv->phy_iface = plat->phy_interface;
 	bsp_priv->ops = ops;
+	bsp_priv->stmmac_rst = plat->stmmac_rst;
 
 	/* Some SoCs have multiple MAC controllers, which need
 	 * to be distinguished.
@@ -1398,44 +1439,47 @@ static int rk_dwmac_fix_reset(struct stmmac_priv *priv)
 	u32 value;
 	int ret;
 
-	/* On several Rockchip SoCs (observed on RK3588 gmac0/fe1b0000), the
-	 * DWMAC4 DMA software reset (DMA_BUS_MODE.SFT_RESET) is unreliable:
-	 * stmmac_reset() reports "Failed to reset the dma" and then proceeds
-	 * to initialise the DMA channels while the engine is in a half-reset
-	 * state, leaving the TX path permanently stuck (NETDEV WATCHDOG loop,
-	 * eth1 IRQ count 0, tx_packets 0).
+	/* On RK3588 gmac0/fe1b0000, the DWMAC4 DMA software reset
+	 * (DMA_BUS_MODE.SFT_RESET, bit 0) can get stuck if the RGMII receive
+	 * clock is not running when the reset is issued. The RX clock comes
+	 * from the switch chip's RGMII external interface, which on upstream
+	 * rtl8365mb is only configured during phylink_mac_config() — after
+	 * stmmac_open() has already attempted the DMA reset.
 	 *
-	 * The robust fix is to use the SoC CRU hardware reset
-	 * (plat->stmmac_rst = SRST_A_GMACx, the "stmmaceth" reset) which
-	 * resets the whole MAC/DMA block, and treat THAT as the reset. We do
-	 * NOT use the DMA_BUS_MODE.SFT_RESET bit at all — its self-clear
-	 * polling is the part that fails on this hardware. After the CRU
-	 * reset the DMA block is in a clean state and the stmmac driver can
-	 * safely continue with channel configuration.
+	 * The companion fix in rtl8365mb_setup() configures the CPU port
+	 * RGMII extint and forces the link up early (during DSA probe, before
+	 * the conduit netdev is opened), so the RX clock should be running by
+	 * the time we get here.
+	 *
+	 * As a belt-and-suspenders measure, we pulse the CRU hardware reset
+	 * (SRST_A_GMACx) before the standard DMA software reset. The CRU
+	 * reset brings the MAC/DMA block to a clean power-on state, which
+	 * helps the SFT_RESET self-clear. Then we do the standard
+	 * dwmac4_dma_reset (set SFT_RESET + poll for self-clear). If SFT_RESET
+	 * still doesn't self-clear (e.g. RX clock still missing), we warn but
+	 * don't fail — stmmac_init_dma_engine continues, and the early RGMII
+	 * force-link should make it work on the next open (watchdog recovery).
 	 */
 	if (plat->stmmac_rst && !IS_ERR(plat->stmmac_rst)) {
 		reset_control_assert(plat->stmmac_rst);
 		udelay(100);
 		reset_control_deassert(plat->stmmac_rst);
-		/* Give the MAC/DMA block time to come out of reset before
-		 * stmmac_init_dma_engine starts writing DMA registers.
-		 */
 		usleep_range(2000, 4000);
-		return 0;
 	}
 
-	/* Fallback: no CRU reset available — use the standard DMA software
-	 * reset with a generous timeout (the bit self-clears, just slowly).
-	 */
+	/* Standard DMA software reset: set SFT_RESET and poll for self-clear.
+	 * With the RX clock running (from the early RGMII config), this
+	 * should complete within the timeout. */
 	value = readl(ioaddr + DMA_BUS_MODE);
 	value |= DMA_BUS_MODE_SFT_RESET;
 	writel(value, ioaddr + DMA_BUS_MODE);
 
 	ret = readl_poll_timeout(ioaddr + DMA_BUS_MODE, value,
 				 !(value & DMA_BUS_MODE_SFT_RESET),
-				 10000, 2000000);
+				 10000, 1000000);
 	if (ret)
-		netdev_warn(priv->dev, "DMA SFT_RESET timed out\n");
+		netdev_warn(priv->dev,
+			    "DMA SFT_RESET did not self-clear (RX clock missing?); DMA may be stuck\n");
 	return ret;
 }
 
@@ -1521,6 +1565,17 @@ static int rk_gmac_powerup(struct rk_priv_data *bsp_priv)
 	default:
 		dev_err(dev, "NO interface defined!\n");
 	}
+
+	/* NOTE: The stmmac_rst re-pulse that was previously done here has
+	 * been removed. We now call rk_gmac_powerup() directly in
+	 * rk_gmac_probe() BEFORE devm_stmmac_pltfr_probe(), matching the
+	 * official 6.1 BSP architecture. This ensures the RGMII clock path
+	 * is configured before stmmac_dvr_probe() deasserts the DMA reset.
+	 *
+	 * When rk_gmac_powerup is called again later via plat->init
+	 * (during stmmac_dvr_probe), the GRF writes are idempotent and
+	 * gmac_clk_enable() skips clock re-enable (clk_enabled check).
+	 */
 
 	ret = rk_phy_powerup(bsp_priv);
 	if (ret) {
@@ -1683,6 +1738,30 @@ static int rk_gmac_probe(struct platform_device *pdev)
 		return PTR_ERR(plat_dat->bsp_priv);
 
 	ret = rk_gmac_clk_init(plat_dat);
+	if (ret)
+		return ret;
+
+	/* Power up the GMAC and configure the RGMII clock path BEFORE
+	 * stmmac_dvr_probe() deasserts the stmmac hardware reset.
+	 *
+	 * The official Rockchip 6.1 BSP calls rk_gmac_powerup() directly
+	 * in rk_gmac_probe() BEFORE stmmac_dvr_probe(). This ensures that
+	 * the RGMII RX clock path (configured via set_to_rgmii() which
+	 * writes to both sys_grf and php_grf) is fully set up before the
+	 * DMA block comes out of reset.
+	 *
+	 * The upstream 6.18 driver instead uses plat_dat->init, which is
+	 * called by stmmac_dvr_probe() AFTER reset_control_deassert(). On
+	 * RK3588 gmac0, this means the DMA block starts up without the
+	 * RGMII RX clock being routed, causing DMA_BUS_MODE.SFT_RESET to
+	 * get stuck at 1 (it only self-clears when the RX clock is running).
+	 *
+	 * We keep plat_dat->init = rk_gmac_init for suspend/resume, but
+	 * call rk_gmac_powerup() here first. The function is idempotent
+	 * (gmac_clk_enable checks clk_enabled, set_to_rgmii just rewrites
+	 * the same GRF values).
+	 */
+	ret = rk_gmac_powerup(plat_dat->bsp_priv);
 	if (ret)
 		return ret;
 

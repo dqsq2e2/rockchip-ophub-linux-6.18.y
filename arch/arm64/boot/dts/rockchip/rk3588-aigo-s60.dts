@@ -364,11 +364,21 @@
 			};
 
 			/* CPU port: upstream rtl8365mb caps at 11 ports (mask 0x07FF),
-			 * so port@16 (used by the Rockchip BSP) is rejected. The
-			 * RTL8367RB-VB RGMII extint is at physical port 7, which is a
-			 * valid index (< 11) and supports RGMII. */
-			port@7 {
-				reg = <7>;
+			 * so port@16 (used by the Rockchip BSP proprietary rtl_api
+			 * driver) is rejected.
+			 *
+			 * We use port@6 which maps to extint 1 in the rtl8365mb driver.
+			 * The official Rockchip BSP rtl8367b driver maps RTL8367R_VB's
+			 * cpu_port=5 → extif 1, and extif 1 corresponds to extint 1 in
+			 * rtl8365mb (same physical RGMII interface, uses CHIP_DEBUG0/1
+			 * registers, not CHIP_DEBUG2). On RTL8367RB-VB, extint 1
+			 * supports RGMII (unlike RTL8367S where extint 1 is SGMII-only).
+			 *
+			 * port@7 + extint 2 was tried first but gmac0's DMA SFT_RESET
+			 * stayed stuck (no RGMII RX clock), suggesting the board's
+			 * RGMII traces for switch1 are physically routed to extint 1. */
+			port@6 {
+				reg = <6>;
 				ethernet = <&gmac0>;
 				phy-mode = "rgmii";
 

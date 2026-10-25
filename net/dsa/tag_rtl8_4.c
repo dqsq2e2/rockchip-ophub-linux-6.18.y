@@ -180,7 +180,20 @@ static int rtl8_4_read_tag(struct sk_buff *skb, struct net_device *dev,
 
 	/* Parse TX (switch->CPU) */
 	port = FIELD_GET(RTL8_4_TX, ntohs(tag16[3]));
-	skb->dev = dsa_conduit_find_user(dev, 0, port);
+
+	/* The RTL8_4 tag format does not carry a switch device index,
+	 * only the source port number. In a multi-switch setup where
+	 * each switch has its own CPU conduit (e.g. switch0 on eth0,
+	 * switch1 on eth1), the conduit uniquely identifies the switch.
+	 * Use the CPU port's ds->index to find the correct user port,
+	 * instead of hardcoding device index 0 which only works for
+	 * the first switch in a DSA tree.
+	 */
+	{
+		struct dsa_port *cpu_dp = dev->dsa_ptr;
+
+		skb->dev = dsa_conduit_find_user(dev, cpu_dp->ds->index, port);
+	}
 	if (!skb->dev) {
 		dev_warn_ratelimited(&dev->dev,
 				     "could not find user for port %d\n",
