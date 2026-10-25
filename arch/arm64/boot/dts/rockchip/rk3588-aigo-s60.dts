@@ -243,12 +243,13 @@
 		vin-supply = <&vcc_3v3_s3>;
 	};
 
-	/* RTL8365MB switch (switch0): 5 user ports (auto-named eth2..eth6).
-	 * CPU port @7 connects to gmac1 via RGMII. Bit-bang SMI on gpio4.
+	/* RTL8365MB switch (switch0): 5 user ports (eth2..eth6).
+	 * CPU port @7 connects to gmac1 (end1) via RGMII. Bit-bang SMI on gpio4.
 	 * Pin mapping taken from the official 6.1 BSP device tree.
-	 * Labels are omitted so the kernel auto-enumerates the slave ports
-	 * as eth2.. (after the GMAC masters eth0/eth1), avoiding the
-	 * -EEXIST name collision seen with fixed labels. */
+	 * Each port has a fixed label and local-mac-address (02:00:00:00:00:0x)
+	 * so the names and MACs are stable across reboots. The GMAC masters
+	 * are named end0/end1 (via their label property), leaving ethN free
+	 * for the slave ports. */
 	switch0: switch0 {
 		compatible = "realtek,rtl8365mb";
 		mdc-gpios = <&gpio4 RK_PA6 GPIO_ACTIVE_HIGH>;
@@ -261,26 +262,36 @@
 
 			port@0 {
 				reg = <0>;
+				label = "eth1";
+				local-mac-address = [02 00 00 00 00 03];
 				phy-handle = <&sw0_phy0>;
 			};
 
 			port@1 {
 				reg = <1>;
+				label = "eth2";
+				local-mac-address = [02 00 00 00 00 04];
 				phy-handle = <&sw0_phy1>;
 			};
 
 			port@2 {
 				reg = <2>;
+				label = "eth3";
+				local-mac-address = [02 00 00 00 00 05];
 				phy-handle = <&sw0_phy2>;
 			};
 
 			port@3 {
 				reg = <3>;
+				label = "eth4";
+				local-mac-address = [02 00 00 00 00 06];
 				phy-handle = <&sw0_phy3>;
 			};
 
 			port@4 {
 				reg = <4>;
+				label = "eth5";
+				local-mac-address = [02 00 00 00 00 07];
 				phy-handle = <&sw0_phy4>;
 			};
 
@@ -323,10 +334,11 @@
 		};
 	};
 
-	/* RTL8367RB switch (switch1): 5 user ports (auto-named eth7..eth11).
-	 * CPU port @7 connects to gmac0 via RGMII. Bit-bang SMI on gpio4.
+	/* RTL8367RB switch (switch1): 5 user ports (eth7..eth11).
+	 * CPU port @6 connects to gmac0 (end0) via RGMII. Bit-bang SMI on gpio4.
 	 * The upstream rtl8365mb driver auto-detects the chip by id; a
-	 * matching compatible ("realtek,rtl8367rb") is added there. */
+	 * matching compatible ("realtek,rtl8367rb") is added there.
+	 * Each port has a fixed label and local-mac-address. */
 	switch1: switch1 {
 		compatible = "realtek,rtl8367rb";
 		mdc-gpios = <&gpio4 RK_PA4 GPIO_ACTIVE_HIGH>;
@@ -340,26 +352,36 @@
 
 			port@0 {
 				reg = <0>;
+				label = "eth6";
+				local-mac-address = [02 00 00 00 00 08];
 				phy-handle = <&sw1_phy0>;
 			};
 
 			port@1 {
 				reg = <1>;
+				label = "eth7";
+				local-mac-address = [02 00 00 00 00 09];
 				phy-handle = <&sw1_phy1>;
 			};
 
 			port@2 {
 				reg = <2>;
+				label = "eth8";
+				local-mac-address = [02 00 00 00 00 0a];
 				phy-handle = <&sw1_phy2>;
 			};
 
 			port@3 {
 				reg = <3>;
+				label = "eth9";
+				local-mac-address = [02 00 00 00 00 0b];
 				phy-handle = <&sw1_phy3>;
 			};
 
 			port@4 {
 				reg = <4>;
+				label = "eth10";
+				local-mac-address = [02 00 00 00 00 0c];
 				phy-handle = <&sw1_phy4>;
 			};
 
@@ -469,6 +491,8 @@
 &gmac1 {
 	clock_in_out = "output";
 	phy-mode = "rgmii";
+	label = "end1";
+	local-mac-address = [02 00 00 00 00 02];
 	tx_delay = <0x4f>;
 	rx_delay = <0x0f>;
 
@@ -491,6 +515,8 @@
 &gmac0 {
 	clock_in_out = "output";
 	phy-mode = "rgmii";
+	label = "end0";
+	local-mac-address = [02 00 00 00 00 01];
 	tx_delay = <0x4f>;
 	rx_delay = <0x0f>;
 
