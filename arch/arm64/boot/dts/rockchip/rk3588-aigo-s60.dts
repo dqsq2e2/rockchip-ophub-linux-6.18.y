@@ -108,41 +108,32 @@
 		pinctrl-0 = <&ir_receiver_pin>;
 	};
 
+	/* LEDs on gpio1 (gpio@fec20000), matching the official 6.1 BSP.
+	 * The official DT uses net-led (gpio1 pin 0) and work-led (gpio1
+	 * pin 1). The earlier nca9555 I2C GPIO-expander references are gone
+	 * because i2c6 is disabled and the expander was never probed. */
 	leds {
 		compatible = "gpio-leds";
 
-		sys_led: led-0 {
-			gpios = <&nca9555 8 GPIO_ACTIVE_HIGH>;
-			label = "sys";
+		work_led: work-led {
+			gpios = <&gpio1 RK_PA1 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "heartbeat";
-			default-state = "on";
 		};
 
-		pwr_led: led-1 {
-			gpios = <&nca9555 7 GPIO_ACTIVE_HIGH>;
-			label = "pwr";
-			default-state = "on";
-		};
-
-		data_led: led-2 {
-			gpios = <&nca9555 4 GPIO_ACTIVE_HIGH>;
-			label = "data";
-			linux,default-trigger = "mmc0";
-			default-state = "off";
-		};
-
-		fourg_led: led-3 {
-			gpios = <&nca9555 1 GPIO_ACTIVE_HIGH>;
-			label = "4g";
+		net_led: net-led {
+			gpios = <&gpio1 RK_PA0 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 	};
 
+	/* PWM fan for thermal cooling, matching the official 6.1 BSP.
+	 * The fan is on pwm14 (pwm@febf0020), NOT pwm1. Uses pwm14m0_pins
+	 * as in the official DT. */
 	fan: pwm-fan {
 		compatible = "pwm-fan";
-		cooling-levels = <0 35 64 100 150 255>;
+		cooling-levels = <0 50 100 150 200 255>;
 		fan-supply = <&vcc5v0_sys>;
-		pwms = <&pwm1 0 50000 0>;
+		pwms = <&pwm14 0 50000 0>;
 		#cooling-cells = <2>;
 	};
 
@@ -697,35 +688,11 @@
 	status = "disabled";
 };
 
+/* i2c0: CPU big-cluster regulators (rk8602@42 + rk8603@43), matching
+ * the official 6.1 BSP. Uses i2c0m2_xfer (gpio0 PD1/PD2) — same pinctrl
+ * mux as official DT (phandle 0x6f). */
 &i2c0 {
-	status = "disabled";
-};
-
-&i2c1 {
-	pinctrl-0 = <&i2c1m2_xfer>;
-	pinctrl-names = "default";
-	status = "okay";
-
-	vdd_npu_s0: regulator@42 {
-		compatible = "rockchip,rk8602";
-		reg = <0x42>;
-		fcs,suspend-voltage-selector = <1>;
-		regulator-name = "vdd_npu_s0";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <550000>;
-		regulator-max-microvolt = <950000>;
-		regulator-ramp-delay = <2300>;
-		vin-supply = <&vcc4v0_sys>;
-
-		regulator-state-mem {
-			regulator-off-in-suspend;
-		};
-	};
-};
-
-&i2c2 {
-	pinctrl-0 = <&i2c2m4_xfer>;
+	pinctrl-0 = <&i2c0m2_xfer>;
 	pinctrl-names = "default";
 	status = "okay";
 
@@ -755,6 +722,36 @@
 		regulator-boot-on;
 		regulator-min-microvolt = <550000>;
 		regulator-max-microvolt = <1050000>;
+		regulator-ramp-delay = <2300>;
+		vin-supply = <&vcc4v0_sys>;
+
+		regulator-state-mem {
+			regulator-off-in-suspend;
+		};
+	};
+};
+
+/* i2c1 disabled — matches official 6.1 BSP. No devices on this bus. */
+&i2c1 {
+	status = "disabled";
+};
+
+/* i2c2: only vdd_npu_s0 (rk8602@42), matching the official 6.1 BSP.
+ * Uses i2c2m0_xfer (gpio0 PB7/PB8) — same pinctrl mux as official DT. */
+&i2c2 {
+	pinctrl-0 = <&i2c2m0_xfer>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	vdd_npu_s0: regulator@42 {
+		compatible = "rockchip,rk8602";
+		reg = <0x42>;
+		fcs,suspend-voltage-selector = <1>;
+		regulator-name = "vdd_npu_s0";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <550000>;
+		regulator-max-microvolt = <950000>;
 		regulator-ramp-delay = <2300>;
 		vin-supply = <&vcc4v0_sys>;
 
@@ -944,8 +941,16 @@
 	};
 };
 
+/* pwm14 enabled for pwm-fan (fan on pwm14m0_pins), matching official BSP.
+ * pwm1 is disabled — it was incorrectly used for the fan before. */
 &pwm1 {
 	status = "disabled";
+};
+
+&pwm14 {
+	status = "okay";
+	pinctrl-0 = <&pwm14m0_pins>;
+	pinctrl-names = "default";
 };
 
 /* NPU disabled — headless recovery doesn't need it */

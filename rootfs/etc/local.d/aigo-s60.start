@@ -2,31 +2,19 @@
 
 echo 1 > /proc/sys/net/ipv4/ip_forward
 
-# eth0/eth1 are DSA masters (no IP). The WAN uplink is a switch user
-# port (eth2 by convention). NAT the br0 LAN out through eth2.
-iptables -t nat -A POSTROUTING -s 192.168.98.0/24 -o eth2 -j MASQUERADE
+if [ -e /dev/mmcblk0p4 ]; then
+	mkdir -p /recovery
+	mount /dev/mmcblk0p4 /recovery
+fi
+
+#iptables -t nat -A POSTROUTING -s 192.168.98.0/24 -o eth2 -j MASQUERADE
 iptables -t nat -A POSTROUTING -s 192.168.98.0/24 -o br0 -j MASQUERADE
 
 /rkdev_arm64 &
 
-exit 0
-
-# 立即生成一版 banner（IP 可能还显示 DOWN），让 getty 秒起不被阻塞
 /usr/sbin/aigo-s60-issue
 
-# 后台异步等待网络就绪后刷新 banner（refresh 会重写 issue 并重启 tty1-6 的 getty）
-# 运行期间由 crond 每分钟执行 aigo-s60-issue monitor，IP 变化时自动刷新
-(
-	i=0
-	while [ $i -lt 30 ]; do
-		wan_up=0; br0_up=0
-		ip -4 -o addr show dev eth2 scope global 2>/dev/null | grep -q inet && wan_up=1
-		ip -4 -o addr show dev br0  scope global 2>/dev/null | grep -q inet && br0_up=1
-		[ $wan_up -eq 1 ] && [ $br0_up -eq 1 ] && break
-		sleep 1
-		i=$((i + 1))
-	done
-	/usr/sbin/aigo-s60-issue refresh
-) &
-
 sync
+
+exit 0
+

@@ -131,7 +131,7 @@ tee /mnt/recovery.conf <<'EOF'
 label RK3588 Linux recovery
     kernel kernel-uImage.lzma
     fdt rk3588-aigo-s60.dtb
-    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 keep rw fw_devlink=off deferred_probe_timeout=1 initcall_debug no_console_suspend panic=1 loglevel=8 irqchip.gicv3_pseudo_nmi=0 irqchip.gicv3_nolpi=1
+    append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 keep rw fw_devlink=off deferred_probe_timeout=1 no_console_suspend panic=3 loglevel=8 irqchip.gicv3_pseudo_nmi=0 irqchip.gicv3_nolpi=1
 EOF
 umount /mnt
 sync
