@@ -721,6 +721,55 @@ F:usr/share/icons/hicolor/scalable/apps
 R:btop.svg
 Z:Q15LqdHXgixr1MGCEbJlb1L/Me588=
 
+C:Q1yuf5hK7E8G6nC2HIghCRX3qyLMs=
+P:btrfs-progs
+V:6.17.1-r1
+A:aarch64
+S:802849
+I:1593649
+T:BTRFS filesystem utilities
+U:https://btrfs.wiki.kernel.org
+L:GPL-2.0-or-later
+o:btrfs-progs
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1774640350
+c:0de8f5fdfa9f69b4ef3f92f1d764d7725666a534
+D:so:libblkid.so.1 so:libc.musl-aarch64.so.1 so:liblzo2.so.2 so:libudev.so.1 so:libuuid.so.1 so:libz.so.1 so:libzstd.so.1
+p:cmd:btrfs=6.17.1-r1 cmd:btrfsck=6.17.1-r1 cmd:fsck.btrfs=6.17.1-r1 cmd:mkfs.btrfs=6.17.1-r1
+F:sbin
+R:btrfs
+a:0:0:755
+Z:Q1TJ+12Cm4y7m0N9nWaJFbe029sas=
+R:btrfsck
+a:0:0:777
+Z:Q1e4ir+MIRcaNUvZS4Vq8u8OVZRm0=
+R:fsck.btrfs
+a:0:0:755
+Z:Q13Y+cP76LOI59lw5BJYtdc/u5OQ4=
+R:mkfs.btrfs
+a:0:0:755
+Z:Q1/++O1saBLQ8xNSfa+BvbTI4dqsY=
+
+C:Q12O3GMX9H2D8NYuCZ3UmOAB/ZwS8=
+P:btrfs-progs-openrc
+V:6.17.1-r1
+A:aarch64
+S:1664
+I:134
+T:BTRFS filesystem utilities (OpenRC init scripts)
+U:https://btrfs.wiki.kernel.org
+L:GPL-2.0-or-later
+o:btrfs-progs
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1774640350
+c:0de8f5fdfa9f69b4ef3f92f1d764d7725666a534
+i:openrc btrfs-progs=6.17.1-r1
+F:etc
+F:etc/init.d
+R:btrfs-scan
+a:0:0:755
+Z:Q1RNXC/Zo++oDrXtcimKXE6et+WcA=
+
 C:Q1cc/8KYHy1Us5N8Jb4vUWmz+wRTI=
 P:busybox
 V:1.37.0-r31
@@ -1351,6 +1400,32 @@ F:usr/share
 F:usr/share/metainfo
 R:org.kernel.software.network.ethtool.metainfo.xml
 Z:Q12XbzxrEuus2K9/anLnslLWrcJ7Y=
+
+C:Q15Pjp9zGlFY/6G161HKt4Wh4VKPk=
+P:eudev-libs
+V:3.2.14-r6
+A:aarch64
+S:26450
+I:67488
+T:Dynamic library to access udev device information
+U:https://github.com/eudev-project/eudev
+L:GPL-2.0-or-later
+o:eudev
+m:Ariadne Conill <ariadne@dereferenced.org>
+t:1763547470
+c:4133df77f8cc98f92679b79de07736589fa48bff
+k:100
+D:so:libc.musl-aarch64.so.1
+p:so:libudev.so.1=1.6.3
+r:libudev
+F:usr
+F:usr/lib
+R:libudev.so.1
+a:0:0:777
+Z:Q1mICIh2qFbe6A8h+6YLxizp0NTC0=
+R:libudev.so.1.6.3
+a:0:0:755
+Z:Q1tV56csXcCSS9BSTefaKlZxCnE1E=
 
 C:Q1MYAHZ9gtgY0BF61CRLFakSbnXfQ=
 P:file

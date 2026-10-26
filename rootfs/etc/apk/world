@@ -5,6 +5,7 @@ alpine-release
 apk-tools
 bridge
 btop
+btrfs-progs
 busybox
 dhcpcd
 dnsmasq
