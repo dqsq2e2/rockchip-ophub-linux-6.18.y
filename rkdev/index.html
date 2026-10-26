@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-theme','dark');</script>
-    <title>RKdev - 固件更新 & 终端</title>
+    <title>讯飞rk3588 AIUI固件更新助手 - RKdev</title>
     <link rel="stylesheet" href="/res/xterm.min.css">
     <script src="/res/xterm.min.js"></script>
     <script src="/res/addon-fit.min.js"></script>
@@ -82,13 +82,13 @@
             --progress-text: #e6edf3;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: "Microsoft YaHei", Arial, sans-serif; background: var(--bg-page); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding-bottom: 60px; transition: background .3s; }
+        body { font-family: "Microsoft YaHei", Arial, sans-serif; background: var(--bg-page); color: var(--text-primary); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding-bottom: 60px; transition: background .3s; }
 
         .navbar { width: 100%; background: var(--bg-navbar); box-shadow: 0 2px 4px var(--shadow); margin-bottom: 30px; transition: background .3s; position: sticky; top: 0; z-index: 100; }
         .nav-topbar { display: flex; align-items: center; justify-content: space-between; padding: 0 20px; height: 52px; }
-        .nav-brand { font-size: 42px; font-weight: 900; letter-spacing: 4px; white-space: nowrap; cursor: pointer; position: relative; color: #1a5fc4; font-family: "Cascadia Code", "Consolas", "SF Mono", monospace; text-shadow: 0 0 1px rgba(26,95,196,.8); transition: all .35s ease; }
+        .nav-brand { font-size: 42px; font-weight: 900; letter-spacing: 0; white-space: nowrap; cursor: pointer; position: relative; color: #1a5fc4; font-family: "Cascadia Code", "Consolas", "SF Mono", monospace; text-shadow: 0 0 1px rgba(26,95,196,.8); transition: all .35s ease; }
         .nav-brand::after { content: ''; position: absolute; left: 0; bottom: -2px; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #1a5fc4, #00d4ff, transparent); transform: scaleX(0); transition: transform .3s ease; }
-        .nav-brand:hover { color: #00d4ff; text-shadow: 0 0 4px rgba(0,212,255,.3); letter-spacing: 7px; }
+        .nav-brand:hover { color: #00d4ff; text-shadow: 0 0 4px rgba(0,212,255,.3); letter-spacing: 0; }
         .nav-brand:hover::after { transform: scaleX(1); box-shadow: 0 0 4px rgba(0,212,255,.3); }
         .nav-brand-logo { position: absolute; top: calc(100% + 10px); left: 0; z-index: 999; opacity: 0; visibility: hidden; transition: opacity .25s, visibility .25s; pointer-events: none; }
         .nav-brand:hover .nav-brand-logo { opacity: 1; visibility: visible; }
@@ -273,12 +273,14 @@
         .boot-item.active .boot-rank { background: var(--accent); color: #fff; box-shadow: 0 2px 8px var(--shadow); }
         .boot-type-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 20px; flex-shrink: 0; letter-spacing: .3px; }
         .boot-type-badge .badge-icon { font-size: 14px; }
+        .boot-type-badge .badge-icon svg { display: block; width: 16px; height: 16px; }
         .boot-type-usb .boot-type-badge { background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb; }
         .boot-type-nvme .boot-type-badge { background: #f3e5f5; color: #7b1fa2; border: 1px solid #e1bee7; }
-        .boot-type-sata .boot-type-badge { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
         .boot-type-emmc .boot-type-badge { background: #f3e5f5; color: #7b1fa2; border: 1px solid #e1bee7; }
+        .boot-type-sd .boot-type-badge { background: #e8f5e9; color: #23733c; border: 1px solid #b8dfc3; }
         .boot-type-recovery .boot-type-badge { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
         .boot-type-maskrom .boot-type-badge { background: #fce4ec; color: #c62828; border: 1px solid #f8bbd0; }
+        [data-theme="dark"] .boot-type-badge { background: var(--bg-info); color: var(--accent); border-color: var(--accent-border); }
         .boot-item.active .boot-type-badge { border-width: 1px; }
         .boot-info { flex: 1; text-align: left; min-width: 0; }
         .boot-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
@@ -356,6 +358,23 @@
         .smart-detail-toggle:hover { background: var(--bg-info); border-color: var(--accent); color: var(--accent); }
         .smart-detail { display: none; margin-top: 6px; overflow: hidden; }
         .smart-detail.visible { display: block; }
+        /* smartctl 原始输出美化 */
+        .smartctl-output { white-space: pre; background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 14px 16px; font-family: 'JetBrains Mono','Cascadia Code','Fira Code','Consolas','Menlo',monospace; font-size: 12px; line-height: 1.7; overflow-x: auto; max-height: 520px; overflow-y: auto; }
+        .smartctl-output::-webkit-scrollbar { width: 8px; height: 8px; }
+        .smartctl-output::-webkit-scrollbar-track { background: #1e1e2e; }
+        .smartctl-output::-webkit-scrollbar-thumb { background: #45475a; border-radius: 4px; }
+        .smartctl-output::-webkit-scrollbar-thumb:hover { background: #585b70; }
+        .smartctl-banner { color: #89b4fa; font-weight: 600; }
+        .smartctl-section-header { color: #a6e3a1; font-weight: 600; margin: 10px 0 4px 0; }
+        .smartctl-section-header:first-child { margin-top: 0; }
+        .smartctl-key { color: #89b4fa; }
+        .smartctl-value { color: #f9e2af; }
+        .smartctl-pass { color: #a6e3a1; font-weight: 600; }
+        .smartctl-fail { color: #f38ba8; font-weight: 600; }
+        .smartctl-warn { color: #fab387; }
+        .smartctl-comment { color: #6c7086; font-style: italic; }
+        .smartctl-table-head { color: #cba6f7; font-weight: 600; }
+        .smartctl-divider { color: #45475a; }
         .part-detail-toggle { display: inline-block; margin: 6px 0 0 0; padding: 4px 14px; font-size: 12px; font-weight: 600; border: 1px solid var(--accent-border); border-radius: 4px; cursor: pointer; background: var(--bg-card); color: var(--accent-light); transition: all .2s; user-select: none; }
         .part-detail-toggle:hover { background: var(--bg-info); border-color: var(--accent); color: var(--accent); }
         .part-detail { display: none; }
@@ -391,9 +410,21 @@
         .smart-attrs-table tr:nth-child(even) td { background: var(--bg-hover); }
         .smart-attrs-table tr:hover td { background: var(--bg-info); }
         /* ===== Update Panel ===== */
-        .update-card { background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
-        .update-card h1 { color: #2c5aa0; font-size: 28px; margin-bottom: 8px; }
-        .update-card .subtitle { color: #666; font-size: 14px; margin-bottom: 25px; }
+        .update-card { background: var(--bg-card); padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px var(--shadow-light); }
+        .update-card h1 { color: var(--accent); font-size: 28px; margin-bottom: 8px; }
+        .update-card .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 25px; }
+        .recovery-fields { display: grid; gap: 20px; margin: 24px 0; }
+        .recovery-field { display: grid; gap: 8px; color: var(--text-primary); font-size: 14px; }
+        .recovery-field input { width: 100%; min-width: 0; padding: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 14px; }
+        .recovery-field input[type="text"] { font-family: monospace; }
+        #recovery-upload-area input[type="file"] { display: block; }
+        .recovery-field small { color: var(--text-muted); line-height: 1.7; }
+        #recovery-result { overflow-wrap: anywhere; }
+        .emmc-status { font-weight: 600; color: var(--text-muted); }
+        .emmc-status-normal { color: var(--success); }
+        .emmc-status-warning { color: var(--warning-text); }
+        .emmc-status-critical { color: var(--danger); }
+        .emmc-note { color: var(--text-muted); font-size: 12px; line-height: 1.8; margin-top: 12px; overflow-wrap: anywhere; }
         .update-section { margin-bottom: 30px; }
         .update-section-title { font-size: 16px; font-weight: 700; color: #2c5aa0; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #eef2fa; }
         .update-upload-area { border: 2px dashed var(--accent-border); border-radius: 8px; padding: 30px; text-align: center; transition: all .2s; cursor: pointer; }
@@ -422,10 +453,10 @@
         .update-proxy-label { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
         .update-status { margin-top: 15px; padding: 12px 16px; border-radius: 6px; font-size: 13px; display: none; }
         .update-status.visible { display: block; }
-        .update-status.info { background: #e7f4ff; color: var(--accent); border: 1px solid #b8dbff; }
-        .update-status.success { background: #e8f5e9; color: #1b7d3a; border: 1px solid #a5d6a7; }
+        .update-status.info { background: var(--bg-info); color: var(--accent); border: 1px solid var(--accent-border); }
+        .update-status.success { background: var(--bg-success); color: var(--success); border: 1px solid var(--success); }
         .update-status.warning { background: var(--bg-warning); color: var(--warning-text); border: 1px solid var(--warning-border); }
-        .update-status.error { background: #fde8e8; color: #c0392b; border: 1px solid #f5b7b7; }
+        .update-status.error { background: var(--bg-error); color: var(--danger); border: 1px solid var(--danger); }
         .update-version-info { display: flex; gap: 20px; margin-bottom: 15px; font-size: 13px; }
         .update-version-info .v-label { color: var(--text-faint); }
         .update-version-info .v-value { font-weight: 600; color: var(--text-primary); }
@@ -528,6 +559,15 @@
             .nav-reboot, .nav-about, .nav-theme { padding: 5px 10px; font-size: 12px; }
             .panel { width: 95%; }
         }
+        @media (max-width: 600px) {
+            .nav-topbar { height: auto; min-height: 46px; padding: 10px; gap: 10px; flex-wrap: wrap; }
+            .nav-brand, .nav-brand:hover { font-size: 24px; letter-spacing: 0; }
+            .nav-actions { flex-wrap: wrap; }
+            .footer-line { flex-wrap: wrap; justify-content: center; gap: 6px; font-size: 11px; }
+            .footer { padding: 8px 12px; }
+            .boot-card, .storage-card, .update-card { padding: 24px; }
+            body { padding-bottom: 85px; }
+        }
     </style>
 </head>
 <body>
@@ -547,19 +587,16 @@
             <div style="text-align:center;margin-bottom:16px;">
                 <img src="/res/logo.png" alt="RKdev" style="width:150px;height:150px;border-radius:20px;object-fit:cover;box-shadow:0 4px 16px rgba(0,0,0,.2);">
             </div>
-            <h2 style="text-align:center;color:var(--accent);font-size:20px;margin:0 0 6px 0;">瑞芯微固件更新助手</h2>
-            <p style="text-align:center;color:var(--text-muted);font-size:14px;margin:0 0 4px 0;">彼度云 G98/Z98 固件更新助手</p>
+            <h2 style="text-align:center;color:var(--accent);font-size:20px;margin:0 0 6px 0;">rk3588 AIUI 恢复助手</h2>
+            <p style="text-align:center;color:var(--text-muted);font-size:14px;margin:0 0 4px 0;">RK3588 固件刷写与系统维护</p>
             <p style="text-align:center;font-size:13px;margin:0 0 4px 0;color:var(--text-muted);">英文名称：<span style="color:var(--accent);font-weight:700;">RKdev (Rockchip Kernel Developer)</span></p>
-            <p class="about-alias" style="text-align:center;font-size:13px;margin:0 0 10px 0;color:var(--text-muted);">项目别称：<span style="color:var(--accent);font-weight:700;">吊炸天刷机工具</span> 😎</p>
             <p class="about-version">版本: <span class="ver-tag">v{{.BuildTime}}</span></p>
-            <p class="about-desc">本项目为瑞芯微 RK3588 平台（彼度云 G98/Z98）设备的固件刷写与维护工具，提供固件刷写、引导顺序配置、存储健康检测、终端访问及在线更新等功能。</p>
+            <p class="about-desc">适用于 rk3588 AIUI 的恢复与维护系统，支持固件刷写、存储健康检测、整盘备份还原和终端访问。基于 RKdev 开源项目适配。</p>
             <div class="about-section">
                 <h3>📋 功能说明</h3>
                 <ul>
                     <li>⚡ 固件刷写 — 支持上传固件镜像刷写到设备存储</li>
-                    <li>🔀 引导顺序 — 配置 U-Boot bootcmd 启动顺序</li>
                     <li>💾 存储检测 — 调用 smartctl/sgdisk 检测存储设备健康状态</li>
-                    <li>📦 更新助手 — 通过 GitHub 在线更新 SPI Recovery 镜像</li>
                     <li>💻 终端 — 远程 Web Shell 访问设备命令行</li>
                 </ul>
             </div>
@@ -573,11 +610,11 @@
                 </ul>
             </div>
             <div class="about-footer">
-                <a href="https://github.com/yifengyou" target="_blank">GitHub: yifengyou</a>
+                <a href="https://github.com/dqsq2e2" target="_blank">GitHub: dqsq2e2</a>
                 <span> | </span>
-                <a href="https://github.com/yifengyou/BDY_G98_RK3588" target="_blank">项目仓库</a>
+                <a href="https://github.com/dqsq2e2/iflytek_rk3588_aiui" target="_blank">项目仓库</a>
                 <span> | </span>
-                <a href="https://github.com/yifengyou/BDY_G98_RK3588/issues/new" target="_blank" rel="noopener">🐛 Bug 反馈</a>
+                <a href="https://github.com/dqsq2e2/iflytek_rk3588_aiui/issues/new" target="_blank" rel="noopener">🐛 Bug 反馈</a>
             </div>
         </div>
     </div>
@@ -609,7 +646,7 @@
     <div class="adv-layout">
         <div class="adv-top">
             <div class="card">
-                <h1>彼度云G98/Z98固件更新助手 <span class="ver-tag">v{{.BuildTime}}</span></h1>
+                <h1>讯飞rk3588 AIUI固件更新助手 <span class="ver-tag">v{{.BuildTime}}</span></h1>
                 <p class="subtitle">选择目标存储设备，上传固件文件即可一键刷写</p>
                 <p class="format-desc">支持 <span class="fmt">.img / .bin</span> 单文件固件，支持常见压缩文件，支持多分区打包固件<span class="fmt-note">（自动解压并解析分区表）</span>。</p>
 
@@ -620,7 +657,7 @@
                 </div>
 
                 <form id="upload-form" class="form-group" onsubmit="handleUpload(event)">
-                    <input type="file" name="firmware" id="firmware-file" accept=".img,.bin,.gz,.rar,.bz2,.bz" required>
+                    <input type="file" name="firmware" id="firmware-file" accept=".img,.bin,.gz,.rar,.bz2,.zip,.7z,.tar,.tgz,.tbz,.tbz2" required>
                     <button type="submit" class="primary" id="btn-flash">⚡ 开始刷写</button>
                 </form>
 
@@ -642,10 +679,10 @@
                 <div class="warning-box">
                     <h3>⚠️ 高危操作注意</h3>
                     <ul>
-                        <li><strong>过滤规则</strong>：仅显示 U盘、SATA盘、M2 NVME 设备。</li>
+                        <li><strong>eMMC</strong>：选择 /dev/mmcblk0 时只替换系统空间，支持多分区 GPT 系统镜像，保留引导和恢复系统。</li>
                         <li><strong>文件类型</strong>：支持 .img / .bin 单文件固件，支持常见压缩文件，支持多分区固件。</li>
-                        <li><strong>数据丢失风险</strong>：刷写操作将覆盖目标设备上的所有数据！</li>
-                        <li><strong>写入方式</strong>：文件暂存至 /tmp/，以 4MB 块逐块写入 (等效 dd bs=4M oflag=sync)。</li>
+                        <li><strong>数据丢失风险</strong>：eMMC 的系统空间或其他目标设备上的数据将被覆盖。</li>
+                        <li><strong>连接与供电</strong>：大镜像会在传输中覆盖目标系统，完成前请勿断网、断电。</li>
                     </ul>
                 </div>
                 <div class="adv-toggle">
@@ -951,57 +988,25 @@
 <div id="update-panel" class="panel">
     <div class="update-card">
         <h1>更新助手</h1>
-        <p class="subtitle">通过上传镜像或网络下载更新刷机助手程序。支持 .img 格式镜像文件。</p>
-
+        <p class="subtitle">上传本地配套 IMG，更新引导与恢复系统。</p>
         <div class="update-version-info">
             <div><span class="v-label">当前版本:</span> <span class="v-value">v{{.BuildTime}}</span></div>
-            <div><span class="v-label">下载源:</span> <span class="v-value"><a href="https://github.com/yifengyou/BDY_G98_RK3588/releases/tag/spi_recovery_uboot2026" target="_blank" style="color:#2c5aa0;text-decoration:none;">https://github.com/yifengyou/BDY_G98_RK3588/releases/tag/spi_recovery_uboot2026</a></span></div>
         </div>
-
-        <div class="update-section">
-            <div class="update-section-title">🌐 网络更新</div>
-            <p style="font-size:13px;color:#666;margin-bottom:12px;">检测 GitHub 仓库是否有新版本，检测到更新后可一键下载并写入 SPI Flash。</p>
-            <div class="update-warning-box">⚠️ <strong>更新写入 SPI Flash 为同步操作，整个过程可能耗时 5-10 分钟。</strong>更新期间请勿关闭浏览器、断开电源或重启设备，否则可能导致设备无法启动。更新成功后引导顺序将自动还原为出厂默认值，请更新完成后前往「<strong>引导顺序</strong>」页面检查并按需调整。</div>
-            <div class="update-proxy-row">
-                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#666;white-space:nowrap;cursor:pointer;user-select:none;">
-                    <input type="checkbox" id="update-proxy-enable" onchange="onProxyToggle()">
-                    <span>启用下载代理</span>
-                </label>
-                <input type="text" class="update-proxy-input" id="update-proxy" placeholder="选择预设代理或自行输入，如 https://gh-proxy.com/" list="proxy-list" value="" disabled>
-                <datalist id="proxy-list">
-                    <option value="https://gh-proxy.com/">
-                    <option value="https://ghfast.top/">
-                    <option value="https://ghproxy.net/">
-                    <option value="https://fastgit.cc/">
-                </datalist>
-            </div>
-            <div class="update-actions">
-                <button type="button" class="update-btn update-btn-check" onclick="checkUpdate()">🔍 检测更新</button>
-                <button type="button" class="update-btn update-btn-download" id="btn-update-download" onclick="downloadUpdate()" disabled>⬇️ 下载并安装</button>
-            </div>
-            <div class="update-status" id="update-net-status"></div>
-            <div class="update-version-list" id="update-version-list" style="display:none;">
-                <div class="update-version-list-title">📋 可用版本（点击选择要安装的版本）</div>
-                <div id="update-version-cards"></div>
-            </div>
-            <div class="update-progress-bar" id="update-progress-bar"><div class="bar-fill" id="update-bar-fill"></div></div>
-        </div>
-
         <div class="update-section">
             <div class="update-section-title">📤 上传更新</div>
-            <p style="font-size:13px;color:#666;margin-bottom:12px;">上传本地 .img 镜像文件来更新刷机助手。</p>
-            <div class="update-warning-box">⚠️ <strong>更新写入 SPI Flash 为同步操作，整个过程可能耗时 5-10 分钟。</strong>更新期间请勿关闭浏览器、断开电源或重启设备，否则可能导致设备无法启动。更新成功后引导顺序将自动还原为出厂默认值，请更新完成后前往「<strong>引导顺序</strong>」页面检查并按需调整。</div>
-            <div class="update-upload-area" id="update-upload-area" onclick="document.getElementById('update-file-input').click()">
-                <div class="update-upload-icon">📦</div>
-                <div class="update-upload-text">点击选择文件或拖拽文件到此区域</div>
-                <div class="update-upload-hint">支持 .img 格式镜像文件</div>
-                <input type="file" id="update-file-input" accept=".img,.bin,.gz" onchange="onUpdateFileSelected(this)">
+            <div class="update-warning-box">更新期间请勿断电、重启或关闭浏览器。仅支持 rk3588 AIUI 配套 IMG，保留已安装的系统和引导顺序。</div>
+        <form onsubmit="upgradeRecovery(event)">
+            <div class="recovery-fields">
+                <label class="recovery-field update-upload-area" id="recovery-upload-area" for="recovery-image">
+                    <span class="update-upload-icon">📦</span>
+                    <span class="update-upload-text">点击选择文件或拖拽文件到此区域</span>
+                    <input id="recovery-image" type="file" accept=".img" required>
+                    <small>如下载的是 7z 压缩包，请先解压，再选择其中的 IMG。</small>
+                </label>
             </div>
-            <div class="update-file-info" id="update-file-info"></div>
-            <div class="update-actions">
-                <button type="button" class="update-btn update-btn-upload" id="btn-update-upload" onclick="uploadUpdate()" disabled>⬆️ 上传并更新</button>
-            </div>
-            <div class="update-status" id="update-upload-status"></div>
+            <div class="boot-actions"><button class="btn-boot-save" id="recovery-submit" type="submit">上传并升级</button></div>
+        </form>
+        <p id="recovery-result" class="update-status" role="status" aria-live="polite"></p>
         </div>
     </div>
 </div>
@@ -1010,9 +1015,9 @@
     <div class="footer-line">
         <span>Copyright &copy; 2026</span>
         <span class="dot"></span>
-        <a href="https://github.com/yifengyou" target="_blank">github/yifengyou</a>
+        <a href="https://github.com/dqsq2e2" target="_blank">github/dqsq2e2</a>
         <span class="dot"></span>
-        <a href="https://github.com/yifengyou/BDY_G98_RK3588/issues/new" target="_blank" rel="noopener" title="提交 Bug 反馈">🐛 Bug 反馈</a>
+        <a href="https://github.com/dqsq2e2/iflytek_rk3588_aiui/issues/new" target="_blank" rel="noopener" title="提交 Bug 反馈">🐛 Bug 反馈</a>
         <span class="dot"></span>
         <span>Built with <span class="heart">&#9829;</span></span>
         <span class="dot"></span>
@@ -1055,6 +1060,7 @@
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         el.classList.add('active');
         document.getElementById(el.dataset.panel).classList.add('active');
+        if (el.dataset.panel === 'storage-panel') loadHardwareAll();
 
         if (el.dataset.panel === 'terminal-panel') {
             if (!termInitialized) {
@@ -1520,18 +1526,17 @@
     // ==================== Flash Functions ====================
     let eventSource = null;
 
-    // 固件文件名预检：仅支持 .img/.bin 及其 .gz 压缩形式
+    // 固件文件名预检，与上传后端支持的格式保持一致。
     function fwNameOk(name) {
-        let s = (name || '').toLowerCase();
-        if (s.endsWith('.gz')) s = s.slice(0, -3);
-        return s.endsWith('.img') || s.endsWith('.bin') || s.endsWith('.rar') || s.endsWith('.bz2');
+        return /\.(img|bin)(\.(gz|bz2))$/i.test(name || '') ||
+            /\.(img|bin|rar|zip|7z|tar|tgz|tbz|tbz2|tar\.gz|tar\.bz2)$/i.test(name || '');
     }
 
     document.getElementById('firmware-file').addEventListener('change', function () {
         if (!this.files.length) return;
         const name = this.files[0].name;
         if (!fwNameOk(name)) {
-            showResult(`⚠️ 不支持的文件类型: ${name}，仅支持 .img / .bin 固件或其 gzip 压缩包(.img.gz / .bin.gz)`, "error");
+            showResult(`⚠️ 不支持的文件类型: ${name}`, "error");
             appendLog('不支持的文件类型: ' + name, 'error');
             this.value = '';
             return;
@@ -1554,7 +1559,7 @@
                 o.disabled = true;
                 o.selected = true;
                 sel.add(o);
-                showResult("未扫描到可用设备，请插入 U 盘、SATA 硬盘或 NVMe 硬盘后点击刷新", "error");
+                showResult("未扫描到可用设备，请插入 U 盘或 NVMe 硬盘后点击刷新", "error");
                 appendLog('未扫描到可用设备', 'error');
                 return;
             }
@@ -1580,7 +1585,7 @@
     function startUploadPoll() {
         stopUploadPoll();
         const mb = b => (b / 1048576).toFixed(1);
-        const labels = { uploading: '正在上传到 /tmp/', streaming: '正在接收并解压到 /tmp/', extracting: '正在解压到 /tmp/' };
+        const labels = { uploading: '正在接收', streaming: '正在接收固件', extracting: '正在解压', direct: '正在流式写盘', verifying: '正在读回校验' };
         let lastLogTime = 0;
         let lastStage = '';
         const timer = setInterval(async () => {
@@ -1593,6 +1598,9 @@
                 if (s.name) line += ' 文件: ' + s.name;
                 if (s.stage === 'extracting') {
                     line += ' 已接收 ' + mb(s.received) + ' MB，已解压 ' + s.extract_elapsed.toFixed(0) + ' 秒，请稍候...';
+                } else if (s.stage === 'direct' || s.stage === 'verifying') {
+                    line += ' 已写入: ' + mb(s.written) + (s.expanded_total > 0 ? ' / ' + (s.expanded_estimate ? '至少 ' : '') + mb(s.expanded_total) : '') + ' MB';
+                    line += ' 已接收: ' + mb(s.received) + ' MB';
                 } else {
                     line += ' 已接收: ' + (s.total > 0 ? mb(s.received) + ' / ' + mb(s.total) + ' MB (' + s.progress.toFixed(0) + '%)' : mb(s.received) + ' MB');
                     line += ' 速度: ' + mb(s.speed) + ' MB/s';
@@ -1620,22 +1628,23 @@
         if (!dev.value) { showResult("请先选择目标设备！", "error"); appendLog("请先选择目标设备", "error"); return; }
         if (!file.files.length) { showResult("请先选择固件文件！", "error"); appendLog("请先选择固件文件", "error"); return; }
         if (!fwNameOk(file.files[0].name)) {
-            showResult(`⚠️ 不支持的文件类型: ${file.files[0].name}，仅支持 .img / .bin 固件或其 gzip 压缩包(.img.gz / .bin.gz)`, "error");
+            showResult(`⚠️ 不支持的文件类型: ${file.files[0].name}`, "error");
             appendLog('不支持的文件类型: ' + file.files[0].name, 'error');
             return;
         }
 
         const mb = (file.files[0].size / 1048576).toFixed(1);
-        if (!confirm(`⚠️ 确定要将 ${mb} MB 刷写到 ${dev.value}？\n数据将被永久清除！`)) return;
+        if (!confirm(`⚠️ 确定要将 ${mb} MB 刷写到 ${dev.value}？\n目标系统数据将被覆盖；写入期间请勿断网、断电。`)) return;
         appendLog('用户确认刷写: ' + file.files[0].name + ' (' + mb + ' MB) → ' + dev.value, 'warn');
 
         const fd = new FormData();
-        fd.append('firmware', file.files[0]);
         fd.append('target_device', dev.value);
+        fd.append('firmware_size', String(file.files[0].size));
+        fd.append('firmware', file.files[0]);
 
         const btn = document.getElementById('btn-flash');
         btn.disabled = true; btn.textContent = "⏳ 执行中...";
-        showResult(/\.gz$/i.test(file.files[0].name) ? "正在上传并解压到 /tmp/ ..." : "正在上传到 /tmp/ ...", "info");
+        showResult("正在接收固件 ...", "info");
         appendLog('开始上传固件: ' + file.files[0].name + ' → ' + dev.value, 'info');
         hideProgress();
         startUploadPoll();
@@ -1681,7 +1690,7 @@
         document.getElementById('progress-total').textContent = '总大小: ' + fmtBytes(t.total);
         document.getElementById('progress-speed').textContent = '速度: ' + (t.speed / 1048576).toFixed(1) + ' MB/s';
         const badge = document.getElementById('status-badge');
-        const map = { writing: ['写入中','status-writing'], partitioning: ['重建分区表','status-syncing'], syncing: ['同步中','status-syncing'], done: ['完成','status-done'], error: ['错误','status-error'] };
+        const map = { writing: ['写入中','status-writing'], partitioning: ['更新分区表','status-syncing'], syncing: ['同步中','status-syncing'], verifying: ['读回校验','status-syncing'], done: ['完成','status-done'], error: ['错误','status-error'] };
         const [txt, cls] = map[t.status] || ['',''];
         badge.textContent = txt; badge.className = 'status-badge ' + cls;
         var now = Date.now();
@@ -2160,14 +2169,58 @@
     }
 
     // ==================== Boot Order (U-Boot) ====================
+    // Lucide CPU icon; license bundled in res/lucide-LICENSE.
+    const chipIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>';
     const bootTypes = [
-        { type: 'usb',      cmd: 'bootcmd_usb',      label: 'USB',        icon: '🔌' },
-        { type: 'nvme',     cmd: 'bootcmd_nvme',     label: 'NVMe',       icon: '⚡' },
-        { type: 'sata',     cmd: 'bootcmd_scsi',     label: 'SATA/SCSI',  icon: '💿' },
-        { type: 'emmc',     cmd: 'bootcmd_emmc',     label: 'eMMC',       icon: '💾' },
-        { type: 'recovery', cmd: 'bootcmd_recovery', label: 'Recovery',   icon: '🔄' },
-        { type: 'maskrom',  cmd: 'bootcmd_maskrom',  label: 'Maskrom',    icon: '🎯' },
+        { type: 'usb',      cmd: 'boot_system_usb',      label: 'USB',        icon: '🔌' },
+        { type: 'nvme',     cmd: 'boot_system_nvme',     label: 'NVMe',       icon: '⚡' },
+        { type: 'sd',       cmd: 'boot_system_sd',       label: 'SD',         icon: '💾' },
+        { type: 'emmc',     cmd: 'boot_system_emmc',     label: 'eMMC',       icon: chipIcon },
+        { type: 'recovery', cmd: 'recovery_boot',   label: '恢复系统',   icon: '🔄' },
     ];
+    (function() {
+        const area = document.getElementById('recovery-upload-area');
+        const input = document.getElementById('recovery-image');
+        area.addEventListener('dragover', e => {
+            e.preventDefault();
+            area.classList.add('dragover');
+        });
+        area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+        area.addEventListener('drop', e => {
+            e.preventDefault();
+            area.classList.remove('dragover');
+            if (!input.disabled && e.dataTransfer.files.length === 1) {
+                input.files = e.dataTransfer.files;
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        });
+    })();
+    async function upgradeRecovery(e) {
+        e.preventDefault();
+        const image = document.getElementById('recovery-image').files[0];
+        if (!image) return;
+        if (!confirm('确认上传并写入配套镜像：' + image.name + '？\n将更新引导与恢复系统，保留系统空间和引导顺序。\n写入期间请勿断电、重启或关闭浏览器。')) return;
+        const button = document.getElementById('recovery-submit');
+        const status = document.getElementById('recovery-result');
+        const data = new FormData();
+        data.append('package', image);
+        button.disabled = true;
+        document.getElementById('recovery-image').disabled = true;
+        status.className = 'update-status visible info';
+        status.textContent = '正在上传、检查并写入，请勿断电…';
+        try {
+            const response = await fetch('/api/recovery_upgrade', {method: 'POST', body: data});
+            const result = await response.json();
+            status.className = 'update-status visible ' + (response.ok ? 'success' : 'error');
+            status.textContent = response.ok ? result.message : result.error;
+        } catch (err) {
+            status.className = 'update-status visible error';
+            status.textContent = '连接中断，请通过串口确认写入状态后再重启：' + err.message;
+        } finally {
+            button.disabled = false;
+            document.getElementById('recovery-image').disabled = false;
+        }
+    }
     let bootOrder = [];
     let bootDisabled = new Set();
     let bootDragSrc = null;
@@ -2468,6 +2521,65 @@
 
     // ==================== Hardware Detection ====================
     let storageDataCache = null;
+    let emmcRefreshRunning = false;
+
+    function emmcRaw(value) {
+        return value == null ? '未上报' : '0x' + value.toString(16).padStart(2, '0');
+    }
+
+    function renderEmmcHealth(info) {
+        const status = ['normal', 'warning', 'critical', 'unknown'].includes(info.status) ? info.status : 'unknown';
+        let html = '<div class="storage-section-title">eMMC 健康监控</div>';
+        html += '<div class="storage-smart-grid">';
+        html += '<div class="smart-item"><div class="smart-label">健康状态</div><div class="smart-value emmc-status emmc-status-' + status + '">' + escHtml(info.summary) + '</div></div>';
+        for (const [label, value] of [
+            ['寿命估算 1', info.lifeA.label + '（' + emmcRaw(info.lifeA.raw) + '）'],
+            ['寿命估算 2', info.lifeB.label + '（' + emmcRaw(info.lifeB.raw) + '）'],
+            ['备用块预警', info.preEolLabel + '（' + emmcRaw(info.preEol) + '）'],
+            ['制造商 ID', info.manufacturer], ['序列号', info.serial],
+            ['固件版本', info.firmware], ['生产日期', info.date]
+        ]) {
+            if (value) html += '<div class="smart-item"><div class="smart-label">' + label + '</div><div class="smart-value">' + escHtml(value) + '</div></div>';
+        }
+        html += '</div>';
+        html += '<p class="emmc-note">寿命按芯片上报的 10% 区间显示，表示已用寿命，不是剩余寿命或容量。未上报不代表健康正常。<br>';
+        html += escHtml(info.source) + ' · 更新于 ' + escHtml(new Date(info.checkedAt).toLocaleTimeString()) + ' · 本页可见时每 15 秒刷新</p>';
+        if (info.cid) html += '<p class="emmc-note">CID：' + escHtml(info.cid) + '</p>';
+        return html;
+    }
+
+    async function refreshEmmcHealth() {
+        if (document.hidden || !document.getElementById('storage-panel').classList.contains('active') ||
+            emmcRefreshRunning || !storageDataCache || !storageDataCache.some(dev => dev.emmc)) return;
+        emmcRefreshRunning = true;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        try {
+            const response = await fetch('/api/emmc', {signal: controller.signal, cache: 'no-store'});
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || '检测失败');
+            for (const dev of storageDataCache) {
+                if (!dev.emmc) continue;
+                const element = document.getElementById('emmc-' + dev.device.split('/').pop());
+                const current = (result.devices || []).find(info => info.device === dev.device);
+                if (!current) {
+                    if (element) element.innerHTML = '<div class="smart-unavailable">eMMC 设备当前不可用，请刷新存储设备。</div>';
+                    continue;
+                }
+                dev.emmc = current;
+                if (element) element.innerHTML = renderEmmcHealth(current);
+            }
+        } catch (error) {
+            document.querySelectorAll('.emmc-health .emmc-note:first-of-type').forEach(element => {
+                element.textContent = '刷新失败，当前显示上次检测结果。请检查连接后重试。';
+            });
+        } finally {
+            clearTimeout(timeout);
+            emmcRefreshRunning = false;
+        }
+    }
+    setInterval(refreshEmmcHealth, 15000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshEmmcHealth(); });
 
     function loadHardwareAll() {
         loadCpuInfo();
@@ -2537,7 +2649,7 @@
             }
             let html = '<table class="net-table"><thead><tr><th>接口</th><th>类型</th><th>状态</th><th>IP 地址</th><th>MAC 地址</th><th>速率</th><th>接收</th><th>发送</th></tr></thead><tbody>';
             for (const iface of d.interfaces) {
-                var statusClass = iface.status === '已连接' ? 'net-status-up' : 'net-status-down';
+                var statusClass = ['已连接', '热点已启用'].includes(iface.status) ? 'net-status-up' : 'net-status-down';
                 var icon = iface.type === '无线' ? '📶' : iface.type === 'USB' ? '🔌' : '🔗';
                 html += '<tr>';
                 html += '<td>' + icon + ' ' + iface.name + '</td>';
@@ -2614,6 +2726,10 @@
                 html += '</div>';
             }
 
+            if (dev.emmc) {
+                html += '<div class="emmc-health" id="emmc-' + escHtml(dev.device.split('/').pop()) + '">' + renderEmmcHealth(dev.emmc) + '</div></div>';
+                continue;
+            }
             html += '<div class="storage-section-title">🩺 SMART 健康状态</div>';
             if (dev.smart.available) {
                 const healthClass = dev.smart.health === 'PASSED' ? 'smart-health-passed' : (dev.smart.health === 'FAILED' ? 'smart-health-failed' : '');
@@ -2657,7 +2773,7 @@
                     html += '<div class="detail-group">';
                     html += '<span class="smart-detail-toggle" onclick="toggleDetail(\'raw-' + di + '\', this)">展开 smartctl 原始输出 ▸</span>';
                     html += '<div class="smart-detail" id="raw-' + di + '">';
-                    html += '<pre class="smart-raw-output">' + dev.smart.rawFull.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>';
+                    html += '<div class="smartctl-output">' + formatSmartctlOutput(dev.smart.rawFull) + '</div>';
                     html += '</div>';
                     html += '</div>';
                 }
@@ -2668,6 +2784,97 @@
             html += '</div>';
         }
         content.innerHTML = html;
+    }
+
+    // 将 smartctl 原始文本输出转为带语法高亮的 HTML
+    function formatSmartctlOutput(raw) {
+        if (!raw) return '';
+        const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const lines = raw.split('\n');
+        let html = '';
+        let inTable = false;
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i];
+            const trimmed = line.trim();
+
+            // 跳过纯空行（保留段落间距）
+            if (trimmed === '') { html += '<div style="height:6px"></div>'; continue; }
+
+            // smartctl 版本横幅（第一两行）
+            if (i < 2 && (trimmed.startsWith('smartctl') || trimmed.startsWith('Copyright'))) {
+                html += '<div class="smartctl-banner">' + esc(trimmed) + '</div>';
+                continue;
+            }
+
+            // 段落分隔线 === SECTION ===
+            if (/^={2,}/.test(trimmed) || /={2,}\s*$/.test(trimmed)) {
+                if (/^=+\s*$/.test(trimmed)) {
+                    // 纯 === 分隔线
+                    html += '<div class="smartctl-divider">' + esc(trimmed) + '</div>';
+                } else {
+                    // === SECTION NAME ===
+                    const name = trimmed.replace(/^=+\s*/, '').replace(/\s*=+$/, '');
+                    html += '<div class="smartctl-section-header">=== ' + esc(name) + ' ===</div>';
+                }
+                continue;
+            }
+
+            // PASSED / FAILED 健康结果
+            if (/PASSED/i.test(trimmed) && /result|health/i.test(trimmed)) {
+                html += '<div>' + esc(line).replace(/PASSED/gi, '<span class="smartctl-pass">PASSED</span>') + '</div>';
+                continue;
+            }
+            if (/FAILED/i.test(trimmed) && /result|health/i.test(trimmed)) {
+                html += '<div>' + esc(line).replace(/FAILED/gi, '<span class="smartctl-fail">FAILED</span>') + '</div>';
+                continue;
+            }
+
+            // 表格表头行（不含前导空格，含多个连续空格对齐的列名）
+            if (/^\S/.test(line) && /\s{2,}/.test(trimmed) && !trimmed.includes(':') &&
+                !trimmed.endsWith(':') && trimmed.split(/\s{2,}/).length >= 3) {
+                inTable = true;
+                html += '<div class="smartctl-table-head">' + esc(trimmed) + '</div>';
+                continue;
+            }
+            // 表格数据行（以空格开头 + 多列对齐）
+            if (/^\s+\S/.test(line) && inTable) {
+                html += '<div style="color:#bac2de">' + esc(line) + '</div>';
+                continue;
+            }
+            // 退出表格模式
+            if (inTable && /^\S/.test(line) && !/\s{2,}/.test(trimmed)) {
+                inTable = false;
+            }
+
+            // 键值对 "Key:                  Value"
+            if (/^[A-Za-z]/.test(trimmed) && trimmed.includes(':')) {
+                const idx = trimmed.indexOf(':');
+                const key = trimmed.substring(0, idx);
+                const val = trimmed.substring(idx + 1).trim();
+                let valHtml = esc(val);
+                // 高亮关键值
+                if (/^0x[0-9a-f]+$/i.test(val)) valHtml = '<span class="smartctl-value">' + valHtml + '</span>';
+                if (/PASSED/i.test(val)) valHtml = '<span class="smartctl-pass">PASSED</span>';
+                if (/FAILED/i.test(val)) valHtml = '<span class="smartctl-fail">FAILED</span>';
+                if (/^\d+(\.\d+)?\s*(Celsius|°C|%|GB|MB|TB|hours|K|W)$/i.test(val)) valHtml = '<span class="smartctl-value">' + valHtml + '</span>';
+                html += '<div><span class="smartctl-key">' + esc(key) + ':</span> ' + valHtml + '</div>';
+                continue;
+            }
+
+            // 注释/提示行
+            if (/^(Use |Please |Note:|Warning:)/i.test(trimmed)) {
+                html += '<div class="smartctl-warn">' + esc(trimmed) + '</div>';
+                continue;
+            }
+            if (/^(No |Self-test|Errors)/i.test(trimmed) && trimmed.length < 60) {
+                html += '<div class="smartctl-comment">' + esc(trimmed) + '</div>';
+                continue;
+            }
+
+            // 普通行
+            html += '<div>' + esc(line) + '</div>';
+        }
+        return html;
     }
 
     function toggleDetail(id, btn) {
@@ -2702,6 +2909,21 @@
                 }
             }
 
+            if (dev.emmc) {
+                const info = dev.emmc;
+                text += '\n  eMMC 健康监控:\n';
+                text += '    健康状态: ' + info.summary + '\n';
+                text += '    寿命估算 1: ' + info.lifeA.label + ' (' + emmcRaw(info.lifeA.raw) + ')\n';
+                text += '    寿命估算 2: ' + info.lifeB.label + ' (' + emmcRaw(info.lifeB.raw) + ')\n';
+                text += '    备用块预警: ' + info.preEolLabel + ' (' + emmcRaw(info.preEol) + ')\n';
+                text += '    制造商 ID: ' + info.manufacturer + '\n';
+                text += '    序列号: ' + info.serial + '\n';
+                text += '    CID: ' + info.cid + '\n';
+                text += '    数据来源: ' + info.source + '\n';
+                text += '    检测时间: ' + info.checkedAt + '\n';
+                text += '\n' + '-'.repeat(60) + '\n\n';
+                continue;
+            }
             text += '\n  SMART 健康状态:\n';
             if (dev.smart.available) {
                 if (dev.smart.health) text += '    健康状态:   ' + dev.smart.health + '\n';
@@ -2746,314 +2968,6 @@
         URL.revokeObjectURL(url);
     }
 
-    // ==================== Update Helper ====================
-    let updateFileInfo = null;
-
-    function showUpdateStatus(id, msg, type) {
-        const el = document.getElementById(id);
-        el.textContent = msg;
-        el.className = 'update-status visible ' + type;
-    }
-
-    function hideUpdateStatus(id) {
-        const el = document.getElementById(id);
-        el.className = 'update-status';
-    }
-
-    function onProxyToggle() {
-        var enabled = document.getElementById('update-proxy-enable').checked;
-        document.getElementById('update-proxy').disabled = !enabled;
-    }
-
-    let updateSelectedUrl = '';
-
-    async function checkUpdate() {
-        var proxy = '';
-        if (document.getElementById('update-proxy-enable').checked) {
-            proxy = document.getElementById('update-proxy').value.trim();
-            if (!proxy) { showUpdateStatus('update-net-status', '⚠️ 已启用代理但未填写代理地址', 'warning'); return; }
-        }
-        var statusEl = 'update-net-status';
-        const dlBtn = document.getElementById('btn-update-download');
-        dlBtn.disabled = true;
-        document.getElementById('update-version-list').style.display = 'none';
-        showUpdateStatus(statusEl, '⏳ 正在检测更新...', 'info');
-
-        try {
-            const resp = await fetch('/api/update_check?proxy=' + encodeURIComponent(proxy));
-            const data = await resp.json();
-            if (data.error) {
-                showUpdateStatus(statusEl, '⚠️ ' + data.error, 'warning');
-                return;
-            }
-            if (data.allAssets && data.allAssets.length) {
-                renderVersionCards(data.allAssets, data.latestVersion);
-                document.getElementById('update-version-list').style.display = 'block';
-            }
-            if (data.hasUpdate) {
-                showUpdateStatus(statusEl, '✅ 发现新版本: ' + data.latestVersion + '（当前: v{{.BuildTime}}），请在下方选择版本后点击下载', 'success');
-            } else if (data.latestVersion) {
-                showUpdateStatus(statusEl, '✓ 当前版本 v{{.BuildTime}} 已是最新，远程最新: ' + data.latestVersion + '（共 ' + data.versionCount + ' 个版本）', 'info');
-            }
-        } catch (e) {
-            showUpdateStatus(statusEl, '❌ 请求失败: ' + e.message, 'error');
-        }
-    }
-
-    function renderVersionCards(assets, latestVersion) {
-        var container = document.getElementById('update-version-cards');
-        var html = '';
-        var currentNorm = '{{.BuildTime}}'.replace(/\./g, '');
-        for (var i = 0; i < assets.length; i++) {
-            var a = assets[i];
-            var isSelected = (i === 0) ? 'selected' : '';
-            var badges = '';
-            if (a.version === latestVersion) badges += '<span class="ver-tag-sm ver-latest">最新</span>';
-            if (a.version === currentNorm) { badges += '<span class="ver-tag-sm ver-current">当前</span>'; isSelected = ''; }
-            var sizeText = a.size ? ' (' + (a.size/1048576).toFixed(1) + 'MB)' : '';
-            html += '<div class="ver-card ' + isSelected + '" data-url="' + a.downloadUrl + '" onclick="selectVersion(this)">';
-            html += '<span>' + a.version + sizeText + '</span>' + badges;
-            html += '</div>';
-        }
-        container.innerHTML = html;
-        var first = container.querySelector('.ver-card.selected');
-        if (first) {
-            updateSelectedUrl = first.dataset.url;
-            document.getElementById('btn-update-download').disabled = false;
-        }
-    }
-
-    function selectVersion(el) {
-        document.querySelectorAll('#update-version-cards .ver-card').forEach(function(c) { c.classList.remove('selected'); });
-        el.classList.add('selected');
-        updateSelectedUrl = el.dataset.url;
-        document.getElementById('btn-update-download').disabled = false;
-    }
-
-    function fmtSpeed(bytesPerSec) {
-        if (bytesPerSec <= 0) return '0 B/s';
-        if (bytesPerSec < 1024) return bytesPerSec.toFixed(0) + ' B/s';
-        if (bytesPerSec < 1048576) return (bytesPerSec/1024).toFixed(1) + ' KB/s';
-        return (bytesPerSec/1048576).toFixed(1) + ' MB/s';
-    }
-
-    function fmtEta(seconds) {
-        if (seconds <= 0 || !isFinite(seconds)) return '--';
-        if (seconds < 60) return Math.ceil(seconds) + ' 秒';
-        if (seconds < 3600) return Math.floor(seconds/60) + ' 分 ' + Math.ceil(seconds%60) + ' 秒';
-        return Math.floor(seconds/3600) + ' 时 ' + Math.floor((seconds%3600)/60) + ' 分';
-    }
-
-    function fmtBytes(n) {
-        if (n <= 0) return '0 B';
-        if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
-        if (n < 1073741824) return (n/1048576).toFixed(1) + ' MB';
-        return (n/1073741824).toFixed(2) + ' GB';
-    }
-
-    let updateDownloading = false;
-    let updateFlashing = false;
-    let updateReader = null;
-
-    async function downloadUpdate() {
-        if (updateDownloading) {
-            cancelUpdateDownload();
-            return;
-        }
-        var dlBtn = document.getElementById('btn-update-download');
-        var url = updateSelectedUrl;
-        if (!url) { showUpdateStatus('update-net-status', '❌ 请先选择一个版本', 'error'); return; }
-
-        var proxy = '';
-        if (document.getElementById('update-proxy-enable').checked) {
-            proxy = document.getElementById('update-proxy').value.trim();
-            if (proxy && url.indexOf('http') === 0) {
-                url = proxy + url;
-            }
-        }
-
-        updateDownloading = true;
-        dlBtn.disabled = false;
-        dlBtn.textContent = '🚫 取消下载';
-        dlBtn.classList.add('btn-cancel');
-        document.getElementById('update-progress-bar').classList.add('visible');
-        document.getElementById('update-bar-fill').style.width = '0%';
-        showUpdateStatus('update-net-status', '⏳ 正在下载更新...', 'info');
-
-        try {
-            var resp = await fetch('/api/update_download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url })
-            });
-
-            updateReader = resp.body.getReader();
-            var decoder = new TextDecoder();
-            var buffer = '';
-
-            while (true) {
-                var chunk = await updateReader.read();
-                if (chunk.done) break;
-                buffer += decoder.decode(chunk.value, { stream: true });
-                var lines = buffer.split('\n');
-                buffer = lines.pop();
-                var eventType = '';
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i];
-                    if (line.startsWith('event: ')) {
-                        eventType = line.slice(7).trim();
-                    } else if (line.startsWith('data: ') && eventType) {
-                        var data = JSON.parse(line.slice(6));
-                        handleUpdateSSE(eventType, data, dlBtn);
-                        eventType = '';
-                    }
-                }
-            }
-        } catch (e) {
-            if (updateDownloading) {
-                showUpdateStatus('update-net-status', '❌ 请求失败: ' + e.message, 'error');
-            }
-        } finally {
-            updateDownloading = false;
-            updateReader = null;
-            if (!updateFlashing) {
-                dlBtn.classList.remove('btn-cancel');
-                dlBtn.textContent = '⬇️ 下载并安装';
-                dlBtn.disabled = !updateSelectedUrl;
-            }
-        }
-    }
-
-    function cancelUpdateDownload() {
-        if (updateFlashing) {
-            showUpdateStatus('update-net-status', '⚠️ 写入固件阶段不可取消，请等待完成', 'warning');
-            return;
-        }
-        if (updateReader) {
-            updateReader.cancel();
-            updateReader = null;
-        }
-        fetch('/api/update_cancel', { method: 'POST' });
-        updateDownloading = false;
-        showUpdateStatus('update-net-status', '🚫 下载已取消', 'warning');
-        document.getElementById('update-progress-bar').classList.remove('visible');
-    }
-
-    function handleUpdateSSE(event, data, dlBtn) {
-        if (event === 'progress') {
-            var pct = data.percent || 0;
-            document.getElementById('update-bar-fill').style.width = pct.toFixed(1) + '%';
-            var phaseText = data.phase === 'flashing' ? '写入 SPI Flash' : '下载镜像';
-            var totalText = data.total > 0 ? fmtBytes(data.total) : '未知';
-            var writtenText = fmtBytes(data.written || 0);
-            var speedText = fmtSpeed(data.speed || 0);
-            var etaText = fmtEta(data.eta || 0);
-            var msg = '⏳ ' + phaseText + '：' + writtenText + ' / ' + totalText +
-                '  |  速度: ' + speedText + '  |  剩余: ' + etaText +
-                '  |  ' + pct.toFixed(1) + '%';
-            showUpdateStatus('update-net-status', msg, 'info');
-            if (data.phase === 'flashing') {
-                updateFlashing = true;
-                dlBtn.disabled = true;
-                dlBtn.classList.remove('btn-cancel');
-                dlBtn.textContent = '⏳ 写入中...';
-            }
-        } else if (event === 'done') {
-            updateFlashing = false;
-            document.getElementById('update-bar-fill').style.width = '100%';
-            showUpdateStatus('update-net-status', '✅ ' + data.message, 'success');
-            fetch('/api/uboot_reset', { method: 'POST' })
-                .then(function(r) { return r.json().catch(function() { return {}; }); })
-                .then(function(result) {
-                    if (!result.error) {
-                        appendLog('更新完成，已自动还原出厂环境变量', 'success');
-                        alert('✅ 更新完成！\n\n环境变量已自动还原为出厂默认值。\n\n引导顺序已恢复为默认顺序（USB → eMMC → NVMe → SATA），如需调整请前往「引导顺序」页面按需配置。');
-                    } else {
-                        appendLog('更新完成，但环境变量还原失败: ' + (result.error || '未知错误'), 'warn');
-                        alert('✅ 更新完成！\n\n⚠️ 环境变量自动还原失败，请手动前往「引导顺序」页面点击「恢复出厂变量」。');
-                    }
-                })
-                .catch(function(e) {
-                    appendLog('更新完成，但环境变量还原请求失败: ' + e.message, 'warn');
-                    alert('✅ 更新完成！\n\n⚠️ 环境变量自动还原失败，请手动前往「引导顺序」页面点击「恢复出厂变量」。');
-                });
-        } else if (event === 'error') {
-            updateFlashing = false;
-            document.getElementById('update-progress-bar').classList.remove('visible');
-            showUpdateStatus('update-net-status', '❌ ' + data.error, 'error');
-        }
-    }
-
-    function onUpdateFileSelected(input) {
-        const file = input.files[0];
-        if (!file) {
-            updateFileInfo = null;
-            document.getElementById('update-file-info').textContent = '';
-            document.getElementById('btn-update-upload').disabled = true;
-            return;
-        }
-        updateFileInfo = file;
-        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
-        document.getElementById('update-file-info').textContent = '📄 ' + file.name + ' (' + sizeMB + ' MB)';
-        document.getElementById('btn-update-upload').disabled = false;
-        hideUpdateStatus('update-upload-status');
-    }
-
-    async function uploadUpdate() {
-        if (!updateFileInfo) return;
-        const uploadBtn = document.getElementById('btn-update-upload');
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = '⏳ 上传中...';
-        showUpdateStatus('update-upload-status', '⏳ 正在上传 ' + updateFileInfo.name + '...', 'info');
-
-        try {
-            const formData = new FormData();
-            formData.append('file', updateFileInfo);
-            const resp = await fetch('/api/update_upload', { method: 'POST', body: formData });
-            const data = await resp.json();
-            if (resp.ok && data.success) {
-                showUpdateStatus('update-upload-status', '✅ ' + data.message, 'success');
-                try {
-                    var resetResp = await fetch('/api/uboot_reset', { method: 'POST' });
-                    var resetResult = await resetResp.json().catch(() => ({}));
-                    if (resetResp.ok && !resetResult.error) {
-                        appendLog('更新完成，已自动还原出厂环境变量', 'success');
-                        alert('✅ 更新完成！\n\n环境变量已自动还原为出厂默认值。\n\n引导顺序已恢复为默认顺序（USB → eMMC → NVMe → SATA），如需调整请前往「引导顺序」页面按需配置。');
-                    } else {
-                        appendLog('更新完成，但环境变量还原失败: ' + (resetResult.error || '未知错误'), 'warn');
-                        alert('✅ 更新完成！\n\n⚠️ 环境变量自动还原失败，请手动前往「引导顺序」页面点击「恢复出厂变量」。');
-                    }
-                } catch (e) {
-                    appendLog('更新完成，但环境变量还原请求失败: ' + e.message, 'warn');
-                    alert('✅ 更新完成！\n\n⚠️ 环境变量自动还原失败，请手动前往「引导顺序」页面点击「恢复出厂变量」。');
-                }
-            } else {
-                showUpdateStatus('update-upload-status', '❌ 更新失败: ' + (data.error || '未知错误'), 'error');
-            }
-        } catch (e) {
-            showUpdateStatus('update-upload-status', '❌ 请求失败: ' + e.message, 'error');
-        } finally {
-            uploadBtn.disabled = false;
-            uploadBtn.textContent = '⬆️ 上传并更新';
-        }
-    }
-
-    (function() {
-        var area = document.getElementById('update-upload-area');
-        if (!area) return;
-        area.addEventListener('dragover', function(e) { e.preventDefault(); area.classList.add('dragover'); });
-        area.addEventListener('dragleave', function(e) { e.preventDefault(); area.classList.remove('dragover'); });
-        area.addEventListener('drop', function(e) {
-            e.preventDefault();
-            area.classList.remove('dragover');
-            var input = document.getElementById('update-file-input');
-            if (e.dataTransfer.files.length) {
-                input.files = e.dataTransfer.files;
-                onUpdateFileSelected(input);
-            }
-        });
-    })();
-
     // ==================== Utilities ====================
     function showProgress() { document.getElementById('progress-container').style.display = 'block'; }
     function hideProgress() { document.getElementById('progress-container').style.display = 'none'; }
@@ -3072,11 +2986,6 @@
         document.getElementById('flash-panel').classList.remove('advanced');
         document.getElementById('log-panel').classList.remove('visible');
         document.getElementById('firmware-file').value = '';
-        document.getElementById('update-proxy-enable').checked = false;
-        document.getElementById('update-proxy').disabled = true;
-        document.getElementById('update-proxy').value = '';
-        document.getElementById('update-version-list').style.display = 'none';
-        updateSelectedUrl = '';
         loadDevices();
         renderFwDownloads();
     };

@@ -1,10 +1,6 @@
 package main
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"bytes"
-	"compress/bzip2"
 	"compress/gzip"
 	"crypto/rand"
 	"crypto/rsa"
@@ -35,7 +31,6 @@ import (
 	"unicode/utf16"
 
 	"github.com/creack/pty"
-	"github.com/nwaples/rardecode/v2"
 	"golang.org/x/net/websocket"
 )
 
@@ -154,6 +149,11 @@ func initLogging() {
 func logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
+		switch p {
+		case "/api/update_check", "/api/update_download", "/api/update_cancel", "/api/update_upload":
+			http.Error(w, "rk3588 AIUI updates are installed through the system-slot flash workflow", http.StatusNotImplemented)
+			return
+		}
 		if p != "/api/progress" && p != "/api/upload_status" && p != "/api/logs" && !strings.HasPrefix(p, "/res/") {
 			log.Printf("[HTTP] %s %s from %s", r.Method, p, r.RemoteAddr)
 			advLog("info", "[HTTP] %s %s from %s", r.Method, p, r.RemoteAddr)
@@ -272,22 +272,26 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 // uploadState 记录当前这次上传的实时状态，供前端通过 /api/upload_status 轮询。
 // Received 统计的是从网络实际收到的请求体字节数（含 multipart 头，略大于文件本身），
 // Total 为请求 Content-Length，因此进度百分比是近似值。
-// Stage: uploading=接收并写入磁盘；streaming=边接收边解压(tar.gz/tar.bz2)；extracting=接收完毕后解压(zip/rar)
+// Stage: uploading/streaming=接收；extracting=解压压缩包；direct=流式写盘；verifying=读回校验
 type uploadState struct {
-	Active       bool    `json:"active"`
-	Stage        string  `json:"stage"`
-	Name         string  `json:"name"`
-	Total        int64   `json:"total"`
-	Received     int64   `json:"received"`
-	Progress     float64 `json:"progress"`
-	Speed        float64 `json:"speed"`        // 字节/秒
-	ExtractElapsed float64 `json:"extract_elapsed"` // 解压已用时间（秒）
+	Active           bool    `json:"active"`
+	Stage            string  `json:"stage"`
+	Name             string  `json:"name"`
+	Total            int64   `json:"total"`
+	Received         int64   `json:"received"`
+	Progress         float64 `json:"progress"`
+	Speed            float64 `json:"speed"`           // 字节/秒
+	ExtractElapsed   float64 `json:"extract_elapsed"` // 解压已用时间（秒）
+	Written          int64   `json:"written"`
+	ExpandedTotal    int64   `json:"expanded_total"`
+	ExpandedEstimate bool    `json:"expanded_estimate"`
+	TaskID           string  `json:"task_id,omitempty"`
 }
 
 var (
-	upMu        sync.Mutex
-	upState     uploadState
-	upStart     time.Time
+	upMu           sync.Mutex
+	upState        uploadState
+	upStart        time.Time
 	upExtractStart time.Time
 )
 
@@ -295,6 +299,7 @@ func upBegin(total int64) {
 	upMu.Lock()
 	upState = uploadState{Active: true, Stage: "uploading", Total: total}
 	upStart = time.Now()
+	upExtractStart = time.Time{}
 	upMu.Unlock()
 }
 
@@ -377,10 +382,12 @@ func jsonErr(w http.ResponseWriter, code int, msg string) {
 // ============ Flash Task Management ============
 
 type FlashWriteItem struct {
-	Name   string
-	Offset int64
-	Size   int64
-	Path   string
+	Name         string
+	Offset       int64
+	Size         int64
+	Path         string
+	Target       string // system-slot packages write each image to its own eMMC partition
+	SourceOffset int64
 }
 
 type FlashTask struct {
@@ -393,9 +400,10 @@ type FlashTask struct {
 	Error    string  `json:"error,omitempty"`
 	Mode     string  `json:"mode,omitempty"`
 
-	Items        []FlashWriteItem `json:"-"`
-	Partitions   []ParamPartition `json:"-"` // 仅 Mode=="multi" 时有效，用于刷写前重建 GPT 分区表
-	TargetDev    string           `json:"-"`
+	Items            []FlashWriteItem `json:"-"`
+	Partitions       []ParamPartition `json:"-"` // 仅 Mode=="multi" 时有效，用于刷写前重建 GPT 分区表
+	TargetDev        string           `json:"-"`
+	SystemPartitions []gptPartition   `json:"-"`
 }
 
 var (
@@ -417,7 +425,11 @@ func newTask(target string, total int64) *FlashTask {
 func getTask(id string) *FlashTask {
 	tasksMu.RLock()
 	defer tasksMu.RUnlock()
-	return tasks[id]
+	if task := tasks[id]; task != nil {
+		snapshot := *task
+		return &snapshot
+	}
+	return nil
 }
 
 func updateTask(id string, fn func(*FlashTask)) {
@@ -454,6 +466,9 @@ type LsblkDevice struct {
 
 func main() {
 	initLogging()
+	if err := installBootScanner(); err != nil {
+		log.Printf("引导扫描命令未更新: %v", err)
+	}
 
 	tmpl := template.Must(template.New("index").Parse(indexHTML))
 
@@ -469,20 +484,22 @@ func main() {
 		jsonOK(w, getFilteredDevices())
 	})
 	http.HandleFunc("/api/reboot", handleReboot)
-	http.HandleFunc("/upload", handleUpload)
+	http.HandleFunc("/upload", handleFirmwareUpload)
 	http.HandleFunc("/api/progress", handleProgress)
 	http.HandleFunc("/api/upload_status", handleUploadStatus)
 	http.HandleFunc("/api/logs", handleLogs)
 	http.HandleFunc("/api/boot_order", handleBootOrder)
 	http.HandleFunc("/api/uboot_setenv", handleUbootSetenv)
 	http.HandleFunc("/api/uboot_reset", handleUbootReset)
- 	http.HandleFunc("/api/storage", handleStorage)
- 	http.HandleFunc("/api/cpu", handleCpu)
- 	http.HandleFunc("/api/network", handleNetwork)
- 	http.HandleFunc("/api/update_check", handleUpdateCheck)
- 	http.HandleFunc("/api/update_download", handleUpdateDownload)
+	http.HandleFunc("/api/recovery_upgrade", handleRecoveryUpgrade)
+	http.HandleFunc("/api/storage", handleStorage)
+	http.HandleFunc("/api/emmc", handleEmmc)
+	http.HandleFunc("/api/cpu", handleCpu)
+	http.HandleFunc("/api/network", handleNetwork)
+	http.HandleFunc("/api/update_check", handleUpdateCheck)
+	http.HandleFunc("/api/update_download", handleUpdateDownload)
 	http.HandleFunc("/api/update_cancel", handleUpdateCancel)
- 	http.HandleFunc("/api/update_upload", handleUpdateUpload)
+	http.HandleFunc("/api/update_upload", handleUpdateUpload)
 	http.HandleFunc("/api/backup/disks", handleBackupDisks)
 	http.HandleFunc("/api/backup/stream", handleBackupStream)
 	http.HandleFunc("/api/backup/progress", handleBackupProgress)
@@ -548,9 +565,9 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 		Subject: pkix.Name{
 			Organization: []string{"RKdev"},
 		},
-		NotBefore: time.Now(),
-		NotAfter:  time.Now().Add(10 * 365 * 24 * time.Hour),
-		KeyUsage:  x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IPAddresses: []net.IP{net.ParseIP("0.0.0.0")},
 	}
@@ -660,28 +677,30 @@ func handleBootOrder(w http.ResponseWriter, r *http.Request) {
 // ============ U-Boot Environment (fw_printenv / fw_setenv) ============
 
 const (
-	mtdblockPath = "/dev/mtdblock0"
+	mmcEnvDevice = "/dev/mmcblk0"
 	fwEnvConfig  = "/etc/fw_env.config"
-	fwEnvContent = "/dev/mtdblock0 0x3F8000  0x2000  0x8000"
+	fwEnvContent = "/dev/mmcblk0 0x1000000 0x20000 0x20000\n/dev/mmcblk0 0x1020000 0x20000 0x20000"
 )
 
 var ubootDefaultVars = map[string]string{
 	"arch":               "arm",
 	"baudrate":           "1500000",
 	"boot_one_dev":       "run try_extlinux_boot; run try_bootscr_boot; run try_rockchip_fw; ",
-	"boot_targets":       "usb nvme scsi",
-	"bootcmd":            "run bootcmd_usb; run bootcmd_emmc;  run bootcmd_nvme; run bootcmd_scsi; echo ERROR: No bootable device found! Enter loader mode; rockusb 0 mtd 2; ",
-	"bootcmd_emmc":       "echo EMMC: scanning; setenv devtype mmc; mmc rescan; mmc info; setenv devnum 0; if mmc dev 0; then run boot_one_dev; fi; setenv devnum 1; if mmc dev 1; then run boot_one_dev; fi; setenv devnum 2; if mmc dev 2; then run boot_one_dev; fi; echo EMMC: no emmc bootable media; ",
-	"bootcmd_nvme":       "echo NVMe: pci enum; pci enum; nvme scan; setenv devtype nvme; setenv devnum 0; if nvme dev 0; then run boot_one_dev; fi; setenv devnum 1; if nvme dev 1; then run boot_one_dev; fi; echo NVMe: no nvme bootable media; ",
-	"bootcmd_recovery":   "sf probe 0;sf read 0x40000000 0x0 0x2000000;blkmap create spidisk;blkmap map spidisk 0 0x10000 mem 0x40000000;part list blkmap 0;sysboot blkmap 0:2 any ${scriptaddr} /recovery.conf;",
-	"bootcmd_scsi":       "echo SCSI: scsi scan; scsi scan; setenv devtype scsi; setenv devnum 0; if scsi dev 0; then run boot_one_dev; fi; setenv devnum 1; if scsi dev 1; then run boot_one_dev; fi; echo SCSI: no scsi bootable media; ",
-	"bootcmd_usb":        "echo USB: start; usb start; usb info; setenv devtype usb; setenv devnum 0; if usb dev 0; then run boot_one_dev; fi; setenv devnum 1; if usb dev 1; then run boot_one_dev; fi; echo USB: no usb bootable media; ",
-	"bootdelay":          "2",
-	"button_cmd_0":       "run bootcmd_recovery",
-	"button_cmd_0_name":  "Recovery key",
+	"boot_targets":       "usb nvme mmc1 mmc0",
+	"bootcmd":            "if test \"${recovery_key}\" = \"1\"; then setenv recovery_key; run recovery_boot; else run boot_system; fi",
+	"bootdelay":          "3",
+	"boot_system":        "run boot_system_usb; run boot_system_nvme; run boot_system_sd; run boot_system_emmc; run recovery_boot",
+	"boot_system_usb":    "usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run lunzn_scan; fi; done",
+	"boot_system_nvme":   "pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run lunzn_scan; fi; done",
+	"boot_system_sd":     "setenv devtype mmc; setenv devnum 1; mmc dev 1; if mmc rescan; then run lunzn_scan; fi",
+	"boot_system_emmc":   "setenv devtype mmc; setenv devnum 0; mmc dev 0; if mmc rescan; then run lunzn_scan; fi",
+	"lunzn_scan":         lunznScan,
+	"lunzn_boot_part":    lunznBootPart,
+	"recovery_boot":      "echo rk3588 AIUI Recovery; mmc dev 0; if mmc rescan; then sysboot mmc 0:1 any ${scriptaddr} /extlinux/extlinux.conf; fi",
+	"recovery_key":       "0",
 	"cpu":                "armv8",
-	"fdt_addr_r":        "0x12000000",
-	"fdtfile":            "rockchip/rk3588-bdy-g98.dtb",
+	"fdt_addr_r":         "0x12000000",
+	"fdtfile":            "rockchip/rk3588-AIUI.dtb",
 	"fdtoverlay_addr_r":  "0x12100000",
 	"kernel_addr_r":      "0x02000000",
 	"kernel_comp_addr_r": "0x0a000000",
@@ -693,6 +712,7 @@ var ubootDefaultVars = map[string]string{
 	"script_size_f":      "0x2000",
 	"scriptaddr":         "0x00c00000",
 	"soc":                "rk3588",
+	"vendor":             "rockchip",
 	"try_bootscr_boot":   "for distro_bootpart in 1 2 3 4 8 5 6 7 9; do for prefix in / /boot/; do echo Try ${devtype} ${devnum}:${distro_bootpart} ${prefix}boot.scr; if test -e ${devtype} ${devnum}:${distro_bootpart} ${prefix}boot.scr; then echo Found boot.scr on ${devtype} ${devnum}:${distro_bootpart}; load ${devtype} ${devnum}:${distro_bootpart} ${scriptaddr} ${prefix}boot.scr; source ${scriptaddr}; echo boot.scr returned, trying next...; fi; done; done; ",
 	"try_extlinux_boot":  "for distro_bootpart in 1 2 3 4 8 5 6 7 9; do for extlinux_path in /boot/extlinux/extlinux.conf /extlinux/extlinux.conf /extlinux.conf; do echo Try ${devtype} ${devnum}:${distro_bootpart} ${extlinux_path}; if test -e ${devtype} ${devnum}:${distro_bootpart} ${extlinux_path}; then echo Found extlinux.conf on ${devtype} ${devnum}:${distro_bootpart}; sysboot ${devtype} ${devnum}:${distro_bootpart} any ${scriptaddr} ${extlinux_path}; echo sysboot returned, trying next...; fi; done; done; ",
 	"try_recovery_boot":  "echo Recovery: scanning ${devtype} ${devnum}; if test -e ${devtype} ${devnum}:1 /recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:1; sysboot ${devtype} ${devnum}:1 any ${scriptaddr} /recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:1 /boot/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:1; sysboot ${devtype} ${devnum}:1 any ${scriptaddr} /boot/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:1 /recovery/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:1; sysboot ${devtype} ${devnum}:1 any ${scriptaddr} /recovery/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:2 /recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:2; sysboot ${devtype} ${devnum}:2 any ${scriptaddr} /recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:2 /boot/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:2; sysboot ${devtype} ${devnum}:2 any ${scriptaddr} /boot/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:2 /recovery/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:2; sysboot ${devtype} ${devnum}:2 any ${scriptaddr} /recovery/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:3 /recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:3; sysboot ${devtype} ${devnum}:3 any ${scriptaddr} /recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:3 /boot/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:3; sysboot ${devtype} ${devnum}:3 any ${scriptaddr} /boot/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:3 /recovery/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:3; sysboot ${devtype} ${devnum}:3 any ${scriptaddr} /recovery/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:4 /recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:4; sysboot ${devtype} ${devnum}:4 any ${scriptaddr} /recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:4 /boot/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:4; sysboot ${devtype} ${devnum}:4 any ${scriptaddr} /boot/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:4 /recovery/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:4; sysboot ${devtype} ${devnum}:4 any ${scriptaddr} /recovery/recovery.conf; echo sysboot returned, trying next...; fi; echo Recovery scan complete, no valid recovery.conf found; ",
@@ -708,8 +728,8 @@ type UbootVar struct {
 // UbootResponse 是获取 U-Boot 环境变量的响应
 type UbootResponse struct {
 	Vars    []UbootVar `json:"vars"`
-	Bootcmd string     `json:"bootcmd"`  // 当前 bootcmd 值
-	Order   []string   `json:"order"`    // 解析后的引导顺序（如 ["usb","nvme","sata"]）
+	Bootcmd string     `json:"bootcmd"` // 当前 bootcmd 值
+	Order   []string   `json:"order"`   // 解析后的引导顺序（如 ["usb","nvme","emmc"]）
 	Count   int        `json:"count"`
 }
 
@@ -719,19 +739,18 @@ var bootCmdTokens = []struct {
 	Label string
 	Type  string
 }{
-	{"bootcmd_usb", "USB", "usb"},
-	{"bootcmd_nvme", "NVMe", "nvme"},
-	{"bootcmd_scsi", "SATA/SCSI", "sata"},
-	{"bootcmd_emmc", "eMMC", "emmc"},
-	{"bootcmd_recovery", "Recovery", "recovery"},
-	{"bootcmd_maskrom", "Maskrom", "maskrom"},
+	{"boot_system_usb", "USB", "usb"},
+	{"boot_system_nvme", "NVMe", "nvme"},
+	{"boot_system_sd", "SD", "sd"},
+	{"boot_system_emmc", "eMMC", "emmc"},
+	{"recovery_boot", "Recovery", "recovery"},
 }
 
-// ensureFwEnvConfig 检测 /dev/mtdblock0 是否存在，若存在则检测 /etc/fw_env.config，
+// ensureFwEnvConfig 检测 eMMC 是否存在，若存在则检测 /etc/fw_env.config，
 // 不存在则写入默认配置
 func ensureFwEnvConfig() error {
-	if _, err := os.Stat(mtdblockPath); err != nil {
-		return fmt.Errorf("未检测到 %s，无法访问 U-Boot 环境变量", mtdblockPath)
+	if _, err := os.Stat(mmcEnvDevice); err != nil {
+		return fmt.Errorf("未检测到 %s，无法访问 U-Boot 环境变量", mmcEnvDevice)
 	}
 
 	if _, err := os.Stat(fwEnvConfig); err != nil {
@@ -771,7 +790,7 @@ func runFwPrintenv() ([]UbootVar, bool, error) {
 }
 
 // handleUbootGet 处理 GET /api/boot_order
-// 1. 检测 /dev/mtdblock0 是否存在
+// 1. 检测 eMMC 是否存在
 // 2. 检测 /etc/fw_env.config 是否存在，不存在则写入
 // 3. 调用 fw_printenv 获取所有环境变量
 // 4. 解析 bootcmd 提取引导顺序
@@ -835,11 +854,17 @@ func handleUbootGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	bootcmd := ""
+	slotBootcmd := ""
 	for _, v := range vars {
 		if v.Name == "bootcmd" {
 			bootcmd = v.Value
-			break
 		}
+		if v.Name == "boot_system" {
+			slotBootcmd = v.Value
+		}
+	}
+	if slotBootcmd != "" {
+		bootcmd = slotBootcmd
 	}
 
 	order := parseBootcmdOrder(bootcmd)
@@ -857,9 +882,8 @@ func handleUbootGet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleUbootSet 处理 POST /api/boot_order
-// 请求体 JSON: {"bootcmd": "run bootcmd_usb; run bootcmd_nvme; ..."}
-// 调用 fw_setenv bootcmd <value> 写入
+// handleUbootSet 处理 POST /api/boot_order。
+// 调整设备扫描顺序，保留主 bootcmd 的按键和恢复兜底逻辑。
 func handleUbootSet(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Bootcmd string `json:"bootcmd"`
@@ -882,20 +906,47 @@ func handleUbootSet(w http.ResponseWriter, r *http.Request) {
 
 	advLog("warn", "[UBOOT] 准备写入 bootcmd=%s", req.Bootcmd)
 
-	out, err := exec.Command("fw_setenv", "bootcmd", req.Bootcmd).CombinedOutput()
-	if err != nil {
-		advLog("error", "[UBOOT] fw_setenv 失败: %v, output: %s", err, string(out))
-		jsonErr(w, http.StatusInternalServerError, fmt.Sprintf("fw_setenv 失败: %v, output: %s", err, string(out)))
+	order := parseBootcmdOrder(req.Bootcmd)
+	if len(order) == 0 {
+		jsonErr(w, http.StatusBadRequest, "bootcmd 未包含 USB、NVMe、eMMC 或 Recovery 引导项")
 		return
 	}
-
-	advLog("success", "[UBOOT] bootcmd 已更新: %s", req.Bootcmd)
-	log.Printf("[UBOOT] bootcmd 已更新: %s", req.Bootcmd)
+	if err := setenvBootSystemOrder(order); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	advLog("success", "[UBOOT] 引导顺序已更新: %v", order)
 	jsonOK(w, map[string]string{"message": "引导顺序已更新，重启后生效"})
 }
 
-// parseBootcmdOrder 从 bootcmd 字符串中解析出引导顺序
-// bootcmd 格式: run bootcmd_usb; run bootcmd_emmc; run bootcmd_nvme; run bootcmd_scsi;
+func setenvBootSystemOrder(order []string) error {
+	var parts []string
+	for _, typ := range order {
+		switch typ {
+		case "usb":
+			parts = append(parts, "run boot_system_usb")
+		case "nvme":
+			parts = append(parts, "run boot_system_nvme")
+		case "sd":
+			parts = append(parts, "run boot_system_sd")
+		case "emmc":
+			parts = append(parts, "run boot_system_emmc")
+		case "recovery":
+			parts = append(parts, "run recovery_boot")
+		}
+	}
+	value := strings.Join(parts, "; ") + ";"
+	if !strings.Contains(value, "run recovery_boot") {
+		value += " run recovery_boot"
+	}
+	out, err := exec.Command("fw_setenv", "boot_system", value).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("fw_setenv boot_system 失败: %v, output: %s", err, string(out))
+	}
+	return nil
+}
+
+// parseBootcmdOrder 从槽位扫描命令中解析出引导顺序。
 // 按 bootcmd 中实际出现顺序返回引导类型列表
 func parseBootcmdOrder(bootcmd string) []string {
 	cmdToType := make(map[string]string)
@@ -916,7 +967,7 @@ func parseBootcmdOrder(bootcmd string) []string {
 }
 
 // buildBootcmd 根据引导类型顺序列表构建 bootcmd 字符串
-// 例如 ["usb", "nvme", "sata"] -> "run bootcmd_usb; run bootcmd_nvme; run bootcmd_scsi;"
+// 例如 ["usb", "nvme", "emmc"] -> "run boot_a_usb; run boot_a_nvme; run boot_a_mmc;"
 func buildBootcmd(order []string) string {
 	var parts []string
 	typeMap := make(map[string]string)
@@ -1002,554 +1053,26 @@ func handleUbootReset(w http.ResponseWriter, r *http.Request) {
 // checkFirmwareName 校验单一固件文件名（不含打包格式）
 func checkFirmwareName(name string) (string, error) {
 	lower := strings.ToLower(name)
-	inner := lower
-	if strings.HasSuffix(inner, ".gz") {
-		inner = inner[:len(inner)-len(".gz")]
+	if strings.HasSuffix(lower, ".img") || strings.HasSuffix(lower, ".bin") {
+		return name, nil
 	}
-	if strings.HasSuffix(inner, ".img") || strings.HasSuffix(inner, ".bin") {
-		return name[:len(inner)], nil
-	}
-	return "", fmt.Errorf("不支持的文件类型 %q，仅支持 .img/.bin 固件及其 gzip 压缩包", name)
+	return "", fmt.Errorf("解压后的固件必须是 .img/.bin 镜像: %q", name)
 }
-
-// ============ Archive Kind Detection ============
-
-// archiveKind 标识上传文件所使用的打包格式
-type archiveKind int
-
-const (
-	archiveNone archiveKind = iota
-	archiveZip
-	archiveTarGz
-	archiveTarBz2
-	archiveRar
-)
-
-func (k archiveKind) String() string {
-	switch k {
-	case archiveZip:
-		return "zip"
-	case archiveTarGz:
-		return "tar.gz"
-	case archiveTarBz2:
-		return "tar.bz2"
-	case archiveRar:
-		return "rar"
-	default:
-		return "none"
-	}
-}
-
-// detectArchiveKind 根据文件名判断打包格式：支持 zip / tar.gz(.tgz) / tar.bz2(.tbz2/.tbz) / rar
-func detectArchiveKind(lowerName string) archiveKind {
-	switch {
-	case strings.HasSuffix(lowerName, ".zip"):
-		return archiveZip
-	case strings.HasSuffix(lowerName, ".tar.gz"), strings.HasSuffix(lowerName, ".tgz"):
-		return archiveTarGz
-	case strings.HasSuffix(lowerName, ".tar.bz2"), strings.HasSuffix(lowerName, ".tbz2"), strings.HasSuffix(lowerName, ".tbz"):
-		return archiveTarBz2
-	case strings.HasSuffix(lowerName, ".rar"):
-		return archiveRar
-	}
-	return archiveNone
-}
-
-func handleUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonErr(w, http.StatusMethodNotAllowed, "仅支持 POST")
-		return
-	}
-	log.Printf("[UPLOAD] 收到上传请求 from %s", r.RemoteAddr)
-	advLog("info", "[UPLOAD] 收到上传请求, Content-Length=%s, 来源=%s", r.Header.Get("Content-Length"), r.RemoteAddr)
-	upBegin(r.ContentLength)
-	defer upEnd()
-	r.Body = &countingBody{ReadCloser: r.Body}
-
-	if err := os.RemoveAll(uploadDir); err != nil {
-		advLog("error", "[UPLOAD] 清理上传目录失败: %v", err)
-		jsonErr(w, http.StatusInternalServerError, "清理上传目录失败: "+err.Error())
-		return
-	}
-	advLog("data", "[UPLOAD] 已清理上传目录 %s", uploadDir)
-	if err := os.MkdirAll(unpackDir, 0755); err != nil {
-		advLog("error", "[UPLOAD] 创建上传目录失败: %v", err)
-		jsonErr(w, http.StatusInternalServerError, "创建上传目录失败: "+err.Error())
-		return
-	}
-	advLog("data", "[UPLOAD] 已创建解压目录 %s", unpackDir)
-
-	mr, err := r.MultipartReader()
-	if err != nil {
-		jsonErr(w, http.StatusBadRequest, "解析表单失败: "+err.Error())
-		return
-	}
-
-	var target, safeName, innerName, tmpPath string
-	var written int64
-	var isGzip bool
-	var kind archiveKind
-	var archivePath string // zip/rar 需要先落盘的路径
-
-	for {
-		part, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			jsonErr(w, http.StatusBadRequest, "读取表单失败: "+err.Error())
-			return
-		}
-
-		switch part.FormName() {
-		case "target_device":
-			b, _ := io.ReadAll(io.LimitReader(part, 1024))
-			target = strings.TrimSpace(string(b))
-
-		case "firmware":
-			safeName = filepath.Base(part.FileName())
-			if safeName == "" || safeName == "." {
-				jsonErr(w, http.StatusBadRequest, "获取文件失败: 文件名为空")
-				return
-			}
-			lowerName := strings.ToLower(safeName)
-			kind = detectArchiveKind(lowerName)
-			advLog("info", "[UPLOAD] 固件文件: %s, 打包格式: %s", safeName, kind)
-			stage := "uploading"
-			if kind == archiveTarGz || kind == archiveTarBz2 {
-				stage = "streaming"
-			}
-			upSet(safeName, stage)
-			advLog("data", "[UPLOAD] 上传阶段: %s", stage)
-
-			// ==== 情况1: tar.gz / tgz — 流式解压，不落盘压缩包 ====
-			if kind == archiveTarGz {
-				extractDir := filepath.Join(unpackDir, fmt.Sprintf("pkg_%d_targz", time.Now().UnixNano()))
-				if err := os.MkdirAll(extractDir, 0755); err != nil {
-					jsonErr(w, http.StatusInternalServerError, "创建解压目录失败: "+err.Error())
-					return
-				}
-				advLog("info", "[UPLOAD] 开始流式解压 tar.gz -> %s", extractDir)
-				files, err := extractTarGz(part, extractDir)
-				if err != nil {
-					os.RemoveAll(extractDir)
-					advLog("error", "[UPLOAD] 解压 tar.gz 失败: %v", err)
-					jsonErr(w, http.StatusBadRequest, "解压 tar.gz 失败: "+err.Error())
-					return
-				}
-				if len(files) == 0 {
-					os.RemoveAll(extractDir)
-					advLog("error", "[UPLOAD] tar.gz 包内没有常规文件")
-					jsonErr(w, http.StatusBadRequest, "tar.gz 包内没有常规文件")
-					return
-				}
-				advLog("success", "[UPLOAD] tar.gz 解压完成, 共 %d 个文件", len(files))
-				for _, f := range files {
-					if st, e := os.Stat(f); e == nil {
-						advLog("data", "[UPLOAD] 解压文件: %s (%s)", filepath.Base(f), formatBytes(st.Size()))
-					}
-				}
-				task, msg, err := buildTaskFromExtracted(files, extractDir, target)
-				if err != nil {
-					os.RemoveAll(extractDir)
-					advLog("error", "[UPLOAD] 构建刷写任务失败: %v", err)
-					jsonErr(w, http.StatusBadRequest, err.Error())
-					return
-				}
-				log.Printf("[UPLOAD] %s -> tar.gz 解压到 %s，%d 文件，mode=%s -> %s",
-					safeName, extractDir, len(files), task.Mode, target)
-				advLog("success", "[UPLOAD] 任务构建完成: mode=%s, 目标=%s, task_id=%s", task.Mode, target, task.ID)
-				go doFlash(task)
-				jsonOK(w, map[string]string{"task_id": task.ID, "message": msg})
-				return
-			}
-
-			// ==== 情况2: tar.bz2 / tbz2 / tbz — 流式解压，不落盘压缩包 ====
-			if kind == archiveTarBz2 {
-				extractDir := filepath.Join(unpackDir, fmt.Sprintf("pkg_%d_tarbz2", time.Now().UnixNano()))
-				if err := os.MkdirAll(extractDir, 0755); err != nil {
-					jsonErr(w, http.StatusInternalServerError, "创建解压目录失败: "+err.Error())
-					return
-				}
-				advLog("info", "[UPLOAD] 开始流式解压 tar.bz2 -> %s", extractDir)
-				files, err := extractTarBz2(part, extractDir)
-				if err != nil {
-					os.RemoveAll(extractDir)
-					advLog("error", "[UPLOAD] 解压 tar.bz2 失败: %v", err)
-					jsonErr(w, http.StatusBadRequest, "解压 tar.bz2 失败: "+err.Error())
-					return
-				}
-				if len(files) == 0 {
-					os.RemoveAll(extractDir)
-					advLog("error", "[UPLOAD] tar.bz2 包内没有常规文件")
-					jsonErr(w, http.StatusBadRequest, "tar.bz2 包内没有常规文件")
-					return
-				}
-				advLog("success", "[UPLOAD] tar.bz2 解压完成, 共 %d 个文件", len(files))
-				for _, f := range files {
-					if st, e := os.Stat(f); e == nil {
-						advLog("data", "[UPLOAD] 解压文件: %s (%s)", filepath.Base(f), formatBytes(st.Size()))
-					}
-				}
-				task, msg, err := buildTaskFromExtracted(files, extractDir, target)
-				if err != nil {
-					os.RemoveAll(extractDir)
-					advLog("error", "[UPLOAD] 构建刷写任务失败: %v", err)
-					jsonErr(w, http.StatusBadRequest, err.Error())
-					return
-				}
-				log.Printf("[UPLOAD] %s -> tar.bz2 解压到 %s，%d 文件，mode=%s -> %s",
-					safeName, extractDir, len(files), task.Mode, target)
-				advLog("success", "[UPLOAD] 任务构建完成: mode=%s, 目标=%s, task_id=%s", task.Mode, target, task.ID)
-				go doFlash(task)
-				jsonOK(w, map[string]string{"task_id": task.ID, "message": msg})
-				return
-			}
-
-			// ==== 情况3: zip / rar — 需先整体落盘再解压 ====
-			if kind == archiveZip || kind == archiveRar {
-				ext := ".zip"
-				if kind == archiveRar {
-					ext = ".rar"
-				}
-				archivePath = filepath.Join(uploadDir, fmt.Sprintf("pkg_%d%s", time.Now().UnixNano(), ext))
-				advLog("info", "[UPLOAD] 接收压缩包 %s -> %s", ext, archivePath)
-				dst, cerr := os.Create(archivePath)
-				if cerr != nil {
-					advLog("error", "[UPLOAD] 创建临时文件失败: %v", cerr)
-					jsonErr(w, http.StatusInternalServerError, "创建临时文件失败: "+cerr.Error())
-					return
-				}
-				written, err = io.Copy(dst, part)
-				dst.Close()
-				if err != nil {
-					os.Remove(archivePath)
-					advLog("error", "[UPLOAD] 保存压缩包失败: %v", err)
-					jsonErr(w, http.StatusInternalServerError, "保存固件包失败: "+err.Error())
-					return
-				}
-				if written == 0 {
-					os.Remove(archivePath)
-					advLog("error", "[UPLOAD] 压缩包内容为空")
-					jsonErr(w, http.StatusBadRequest, "文件内容为空")
-					return
-				}
-				advLog("success", "[UPLOAD] 压缩包接收完成: %s (%s)", filepath.Base(archivePath), formatBytes(written))
-			} else {
-				innerName, err = checkFirmwareName(safeName)
-				if err != nil {
-					advLog("error", "[UPLOAD] 文件类型检查失败: %v", err)
-					jsonErr(w, http.StatusBadRequest, err.Error())
-					return
-				}
-				head := make([]byte, 2)
-				n, _ := io.ReadFull(part, head)
-				head = head[:n]
-				isGzip = n == 2 && head[0] == 0x1f && head[1] == 0x8b
-				advLog("data", "[UPLOAD] 单文件固件: innerName=%s, isGzip=%v", innerName, isGzip)
-
-				var src io.Reader = io.MultiReader(bytes.NewReader(head), part)
-				if isGzip {
-					gz, gerr := gzip.NewReader(src)
-					if gerr != nil {
-						advLog("error", "[UPLOAD] gzip 解压初始化失败: %v", gerr)
-						jsonErr(w, http.StatusBadRequest, "gzip 解压失败: "+gerr.Error())
-						return
-					}
-					defer gz.Close()
-					src = gz
-					advLog("info", "[UPLOAD] 检测到 gzip 格式, 将自动解压")
-				}
-
-				tmpPath = filepath.Join(uploadDir, fmt.Sprintf("fw_%d_%s", time.Now().UnixNano(), innerName))
-				dst, cerr := os.Create(tmpPath)
-				if cerr != nil {
-					advLog("error", "[UPLOAD] 创建临时文件失败: %v", cerr)
-					jsonErr(w, http.StatusInternalServerError, "创建临时文件失败: "+cerr.Error())
-					return
-				}
-				written, err = io.Copy(dst, src)
-				dst.Close()
-				if err != nil {
-					os.Remove(tmpPath)
-					if isGzip {
-						advLog("error", "[UPLOAD] gzip 解压写入失败: %v", err)
-						jsonErr(w, http.StatusBadRequest, "gzip 解压失败: "+err.Error())
-					} else {
-						advLog("error", "[UPLOAD] 保存文件失败: %v", err)
-						jsonErr(w, http.StatusInternalServerError, "保存文件失败: "+err.Error())
-					}
-					return
-				}
-				if written == 0 {
-					os.Remove(tmpPath)
-					advLog("error", "[UPLOAD] 文件内容为空")
-					jsonErr(w, http.StatusBadRequest, "文件内容为空")
-					return
-				}
-				advLog("success", "[UPLOAD] 固件文件已暂存: %s (%s), isGzip=%v", filepath.Base(tmpPath), formatBytes(written), isGzip)
-			}
-		}
-		part.Close()
-	}
-
-	// 后续处理（zip / rar / 单文件）；tar.gz / tar.bz2 已在上面提前 return
-	if kind != archiveZip && kind != archiveRar && tmpPath == "" {
-		jsonErr(w, http.StatusBadRequest, "获取文件失败: 缺少 firmware 文件")
-		return
-	}
-	if target == "" || !strings.HasPrefix(target, "/dev/") || strings.Contains(target, "..") {
-		if kind == archiveZip || kind == archiveRar {
-			os.Remove(archivePath)
-		} else {
-			os.Remove(tmpPath)
-		}
-		jsonErr(w, http.StatusBadRequest, "非法目标设备路径")
-		return
-	}
-
-	var task *FlashTask
-	var msg string
-
-	if kind == archiveZip || kind == archiveRar {
-		upSetStage("extracting")
-		extractDir := filepath.Join(unpackDir, fmt.Sprintf("pkg_%d", time.Now().UnixNano()))
-		if err := os.MkdirAll(extractDir, 0755); err != nil {
-			os.Remove(archivePath)
-			advLog("error", "[UPLOAD] 创建解压目录失败: %v", err)
-			jsonErr(w, http.StatusInternalServerError, "创建解压目录失败: "+err.Error())
-			return
-		}
-
-		advLog("info", "[UPLOAD] 开始解压 %s 压缩包 -> %s", kind, extractDir)
-		var files []string
-		if kind == archiveZip {
-			files, err = extractZip(archivePath, extractDir)
-		} else {
-			files, err = extractRar(archivePath, extractDir)
-		}
-		if err != nil {
-			os.RemoveAll(extractDir)
-			advLog("error", "[UPLOAD] 解压 %s 失败: %v", kind, err)
-			jsonErr(w, http.StatusBadRequest, fmt.Sprintf("解压 %s 固件包失败: %v", kind, err))
-			return
-		}
-		advLog("success", "[UPLOAD] %s 解压完成, 共 %d 个文件", kind, len(files))
-		for _, f := range files {
-			if st, e := os.Stat(f); e == nil {
-				advLog("data", "[UPLOAD] 解压文件: %s (%s)", filepath.Base(f), formatBytes(st.Size()))
-			}
-		}
-
-		task, msg, err = buildTaskFromExtracted(files, extractDir, target)
-		if err != nil {
-			os.RemoveAll(extractDir)
-			advLog("error", "[UPLOAD] 构建刷写任务失败: %v", err)
-			jsonErr(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		log.Printf("[UPLOAD] %s -> 已解压到 %s，共 %d 个文件，mode=%s -> %s",
-			safeName, extractDir, len(files), task.Mode, target)
-		advLog("success", "[UPLOAD] 任务构建完成: mode=%s, 目标=%s, task_id=%s", task.Mode, target, task.ID)
-	} else {
-		task = newTask(target, written)
-		task.Mode = "single"
-		task.Items = []FlashWriteItem{{Name: innerName, Offset: 0, Size: written, Path: tmpPath}}
-
-		msg = fmt.Sprintf("文件 %s (%d MB) 已暂存，正在刷写到 %s ...", safeName, written/1024/1024, target)
-		if isGzip {
-			msg = fmt.Sprintf("gzip 固件 %s 已自动解压为 %s (%d MB)，正在刷写到 %s ...",
-				safeName, innerName, written/1024/1024, target)
-		}
-		log.Printf("[UPLOAD] %s -> %s (%d bytes, gzip=%v) -> %s", safeName, tmpPath, written, isGzip, target)
-		advLog("success", "[UPLOAD] 单文件任务已创建: mode=single, 目标=%s, task_id=%s", target, task.ID)
-	}
-
-	go doFlash(task)
-
-	jsonOK(w, map[string]string{
-		"task_id": task.ID,
-		"message": msg,
-	})
-}
-
-// ============ Archive Extractors ============
-
-// extractTarGz 流式解压 tar.gz 到 destDir，返回解出的常规文件路径列表
-func extractTarGz(reader io.Reader, destDir string) ([]string, error) {
-	gzReader, err := gzip.NewReader(reader)
-	if err != nil {
-		return nil, fmt.Errorf("gzip 解压初始化失败: %w", err)
-	}
-	defer gzReader.Close()
-
-	return extractTarStream(gzReader, destDir)
-}
-
-// extractTarBz2 流式解压 tar.bz2 到 destDir，返回解出的常规文件路径列表
-func extractTarBz2(reader io.Reader, destDir string) ([]string, error) {
-	bz2Reader := bzip2.NewReader(reader)
-	return extractTarStream(bz2Reader, destDir)
-}
-
-// extractTarStream 是 tar 层的通用解压逻辑，供 gzip / bzip2 等上层解压器复用
-func extractTarStream(tarStream io.Reader, destDir string) ([]string, error) {
-	tarReader := tar.NewReader(tarStream)
-	var files []string
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("读取 tar 条目失败: %w", err)
-		}
-
-		cleanName := filepath.Clean(header.Name)
-		if cleanName == ".." || strings.HasPrefix(cleanName, "../") || filepath.IsAbs(cleanName) {
-			log.Printf("extractTarStream: 跳过可疑路径: %s", header.Name)
-			continue
-		}
-		cleanName = filepath.FromSlash(cleanName)
-		outPath := filepath.Join(destDir, cleanName)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(outPath, os.FileMode(header.Mode)); err != nil {
-				return nil, err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-				return nil, err
-			}
-			mode := os.FileMode(header.Mode)
-			if mode == 0 {
-				mode = 0644
-			}
-			outFile, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
-				return nil, fmt.Errorf("写入 %s 失败: %w", outPath, err)
-			}
-			outFile.Close()
-			files = append(files, outPath)
-		}
-	}
-	return files, nil
-}
-
-// extractRar 解压 RAR 文件到 destDir，返回解出的常规文件路径列表
-func extractRar(rarPath, destDir string) ([]string, error) {
-	r, err := rardecode.OpenReader(rarPath)
-	if err != nil {
-		return nil, fmt.Errorf("打开 RAR 文件失败: %w", err)
-	}
-	defer r.Close()
-
-	var files []string
-	for {
-		header, err := r.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("读取 RAR 条目失败: %w", err)
-		}
-
-		// 防御路径穿越
-		cleanName := filepath.Clean(header.Name)
-		if cleanName == ".." || strings.HasPrefix(cleanName, "../") || filepath.IsAbs(cleanName) {
-			log.Printf("extractRar: 跳过可疑路径: %s", header.Name)
-			continue
-		}
-		cleanName = filepath.FromSlash(cleanName)
-		outPath := filepath.Join(destDir, cleanName)
-
-		if header.IsDir {
-			if err := os.MkdirAll(outPath, 0755); err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-			return nil, err
-		}
-
-		outFile, err := os.Create(outPath)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := io.Copy(outFile, r); err != nil {
-			outFile.Close()
-			return nil, fmt.Errorf("写入 %s 失败: %w", outPath, err)
-		}
-		outFile.Close()
-		files = append(files, outPath)
-	}
-	return files, nil
-}
-
-// extractZip 解压 ZIP 文件到 destDir，返回解出的常规文件路径列表
-func extractZip(zipPath, destDir string) ([]string, error) {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-
-	var files []string
-	for _, f := range r.File {
-		cleanName := filepath.Clean(f.Name)
-		if cleanName == ".." || strings.HasPrefix(cleanName, "../") || filepath.IsAbs(cleanName) {
-			log.Printf("extractZip: 跳过可疑路径: %s", f.Name)
-			continue
-		}
-		outPath := filepath.Join(destDir, cleanName)
-
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(outPath, 0755); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-			return nil, err
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		out, err := os.Create(outPath)
-		if err != nil {
-			rc.Close()
-			return nil, err
-		}
-		_, err = io.Copy(out, rc)
-		out.Close()
-		rc.Close()
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, outPath)
-	}
-	return files, nil
-}
-
-// ============ Task Building From Extracted Files ============
 
 // buildTaskFromExtracted 根据解压后的文件列表构建刷写任务。
 //
 //   - 只有一个文件：直接整盘写入目标设备。
 //   - 多个文件：交由 buildMultiFileTask 处理（package-file/config.cfg + parameter.txt）。
 func buildTaskFromExtracted(files []string, extractDir, target string) (*FlashTask, string, error) {
+	if err := validateFlashTarget(target); err != nil {
+		return nil, "", err
+	}
 	if len(files) == 0 {
 		return nil, "", fmt.Errorf("固件包内没有解压出任何文件")
+	}
+
+	if isSystemSlotTarget(target) {
+		return buildSystemSlotTask(files, target)
 	}
 
 	if len(files) == 1 {
@@ -1557,6 +1080,37 @@ func buildTaskFromExtracted(files []string, extractDir, target string) (*FlashTa
 	}
 
 	return buildMultiFileTask(files, extractDir, target)
+}
+
+func isSystemSlotTarget(target string) bool {
+	return target == "/dev/mmcblk0"
+}
+
+func validateFlashTarget(target string) error {
+	if isSystemSlotTarget(target) {
+		return nil
+	}
+	if !strings.HasPrefix(target, "/dev/") || strings.Contains(target, "..") {
+		return fmt.Errorf("非法目标设备路径")
+	}
+	name := strings.TrimPrefix(target, "/dev/")
+	if !wholeDiskName.MatchString(name) {
+		return fmt.Errorf("目标必须是 eMMC、SD、USB 或 NVMe 设备")
+	}
+	return nil
+}
+
+func buildSystemSlotTask(files []string, target string) (*FlashTask, string, error) {
+	return buildSystemAreaTask(files, target)
+}
+
+func findImageByNames(files []string, names []string) string {
+	for _, name := range names {
+		if p := findByBaseName(files, name); p != "" {
+			return p
+		}
+	}
+	return ""
 }
 
 // buildSingleFileTask 解压结果只有一个文件时，直接将其整盘写入目标设备
@@ -1752,6 +1306,16 @@ func findConfigCfg(files []string) string {
 
 // doFlash 执行刷写
 func doFlash(task *FlashTask) {
+	releaseWriteMu.Lock()
+	defer releaseWriteMu.Unlock()
+	doFlashLocked(task)
+}
+
+func doFlashLocked(task *FlashTask) {
+	if err := checkFlashDiskIdle(task.TargetDev); err != nil {
+		updateTask(task.ID, func(t *FlashTask) { t.Status, t.Error = "error", err.Error() })
+		return
+	}
 	defer func() {
 		if t := getTask(task.ID); t != nil && t.Status == "error" {
 			log.Printf("[%s] ❌ Flash failed: %s", task.ID, t.Error)
@@ -1761,6 +1325,12 @@ func doFlash(task *FlashTask) {
 
 	log.Printf("[%s] Flash start: mode=%s, %d item(s) -> %s (%d bytes)",
 		task.ID, task.Mode, len(task.Items), task.TargetDev, task.Total)
+	if task.Mode == "system" {
+		if err := checkSystemAreaIdle(task.TargetDev); err != nil {
+			updateTask(task.ID, func(t *FlashTask) { t.Status, t.Error = "error", err.Error() })
+			return
+		}
+	}
 	advLog("info", "[%s] 🚀 刷写开始: 模式=%s, %d 个分区 -> %s (总大小 %s)",
 		task.ID, task.Mode, len(task.Items), task.TargetDev, formatBytes(task.Total))
 	for i, item := range task.Items {
@@ -1784,24 +1354,46 @@ func doFlash(task *FlashTask) {
 		updateTask(task.ID, func(t *FlashTask) { t.Status = "writing" })
 	}
 
-	dst, err := os.OpenFile(task.TargetDev, os.O_WRONLY|os.O_SYNC, 0)
-	if err != nil {
-		updateTask(task.ID, func(t *FlashTask) {
-			t.Status = "error"
-			t.Error = "打开目标设备失败: " + err.Error()
-		})
-		advLog("error", "[%s] ❌ 打开目标设备 %s 失败: %v", task.ID, task.TargetDev, err)
-		return
+	var (
+		dst *os.File
+		err error
+	)
+	if task.TargetDev != "" {
+		dst, err = os.OpenFile(task.TargetDev, os.O_WRONLY|os.O_SYNC, 0)
+		if err != nil {
+			updateTask(task.ID, func(t *FlashTask) {
+				t.Status = "error"
+				t.Error = "打开目标设备失败: " + err.Error()
+			})
+			advLog("error", "[%s] ❌ 打开目标设备 %s 失败: %v", task.ID, task.TargetDev, err)
+			return
+		}
+		defer dst.Close()
 	}
-	defer dst.Close()
 
 	buf := make([]byte, blockSize)
 	var totalWritten int64
 	start := time.Now()
 
 	for _, item := range task.Items {
+		itemDst := dst
+		closeItemDst := false
+		if item.Target != "" {
+			itemDst, err = os.OpenFile(item.Target, os.O_WRONLY|os.O_SYNC, 0)
+			if err != nil {
+				updateTask(task.ID, func(t *FlashTask) {
+					t.Status = "error"
+					t.Error = fmt.Sprintf("打开系统分区 %s 失败: %v", item.Target, err)
+				})
+				return
+			}
+			closeItemDst = true
+		}
 		src, err := os.Open(item.Path)
 		if err != nil {
+			if closeItemDst {
+				itemDst.Close()
+			}
 			updateTask(task.ID, func(t *FlashTask) {
 				t.Status = "error"
 				t.Error = fmt.Sprintf("打开源文件 %s 失败: %v", item.Name, err)
@@ -1809,12 +1401,24 @@ func doFlash(task *FlashTask) {
 			advLog("error", "[%s] ❌ 打开源文件 %s 失败: %v", task.ID, item.Path, err)
 			return
 		}
+		if _, err := src.Seek(item.SourceOffset, io.SeekStart); err != nil {
+			src.Close()
+			if closeItemDst {
+				itemDst.Close()
+			}
+			updateTask(task.ID, func(t *FlashTask) { t.Status, t.Error = "error", err.Error() })
+			return
+		}
+		reader := io.LimitReader(src, item.Size)
 
 		advLog("info", "[%s] 📝 开始写入分区 '%s' (%s) @ offset 0x%X",
 			task.ID, item.Name, formatBytes(item.Size), item.Offset)
 
-		if _, err := dst.Seek(item.Offset, io.SeekStart); err != nil {
+		if _, err := itemDst.Seek(item.Offset, io.SeekStart); err != nil {
 			src.Close()
+			if closeItemDst {
+				itemDst.Close()
+			}
 			updateTask(task.ID, func(t *FlashTask) {
 				t.Status = "error"
 				t.Error = fmt.Sprintf("定位分区 '%s' 失败: %v", item.Name, err)
@@ -1828,10 +1432,13 @@ func doFlash(task *FlashTask) {
 		var itemWritten int64
 		lastLogTime := time.Now()
 		for {
-			n, readErr := src.Read(buf)
+			n, readErr := reader.Read(buf)
 			if n > 0 {
-				if _, werr := dst.Write(buf[:n]); werr != nil {
+				if _, werr := itemDst.Write(buf[:n]); werr != nil {
 					src.Close()
+					if closeItemDst {
+						itemDst.Close()
+					}
 					updateTask(task.ID, func(t *FlashTask) {
 						t.Status = "error"
 						t.Error = fmt.Sprintf("写入 '%s' 失败 @ %d bytes: %v", item.Name, totalWritten, werr)
@@ -1873,12 +1480,45 @@ func doFlash(task *FlashTask) {
 			}
 		}
 		src.Close()
+		if itemWritten != item.Size {
+			if closeItemDst {
+				itemDst.Close()
+			}
+			updateTask(task.ID, func(t *FlashTask) { t.Status, t.Error = "error", "镜像数据不完整，未更新分区表" })
+			return
+		}
+		if closeItemDst {
+			if err := itemDst.Sync(); err != nil {
+				advLog("warn", "[%s] 同步 %s 失败: %v", task.ID, item.Target, err)
+			}
+			itemDst.Close()
+		}
 		advLog("success", "[%s] ✅ 分区 '%s' 写入完成 (%s)", task.ID, item.Name, formatBytes(itemWritten))
 	}
 
 	updateTask(task.ID, func(t *FlashTask) { t.Status = "syncing" })
 	advLog("warn", "[%s] 💾 同步磁盘数据中...", task.ID)
-	dst.Sync()
+	if dst != nil {
+		if err := dst.Sync(); err != nil {
+			updateTask(task.ID, func(t *FlashTask) { t.Status, t.Error = "error", err.Error() })
+			return
+		}
+	}
+	if task.Mode == "system" {
+		updateTask(task.ID, func(t *FlashTask) { t.Status = "verifying" })
+		if err := verifySystemArea(task); err != nil {
+			updateTask(task.ID, func(t *FlashTask) { t.Status, t.Error = "error", err.Error() })
+			return
+		}
+		if err := applySystemAreaPartitions(task); err != nil {
+			updateTask(task.ID, func(t *FlashTask) { t.Status, t.Error = "error", err.Error() })
+			return
+		}
+		if err := adaptSystemBoot(task); err != nil {
+			updateTask(task.ID, func(t *FlashTask) { t.Status, t.Error = "error", err.Error() })
+			return
+		}
+	}
 	advLog("success", "[%s] ✅ 磁盘同步完成", task.ID)
 
 	elapsed := time.Since(start).Seconds()
@@ -2517,6 +2157,8 @@ func handleProgress(w http.ResponseWriter, r *http.Request) {
 
 // ============ Device Filter ============
 
+var wholeDiskName = regexp.MustCompile(`^(sd[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+)$`)
+
 func getFilteredDevices() []BlockDevice {
 	cmd := exec.Command("lsblk", "-bdnJ", "-o", "NAME,SIZE,TYPE,MODEL,TRAN")
 	output, err := cmd.Output()
@@ -2538,7 +2180,7 @@ func getFilteredDevices() []BlockDevice {
 			strings.HasPrefix(d.Name, "zram") {
 			continue
 		}
-		if !strings.HasPrefix(d.Name, "sd") && !strings.HasPrefix(d.Name, "nvme") {
+		if d.Type != "disk" || !wholeDiskName.MatchString(d.Name) {
 			continue
 		}
 
@@ -2546,14 +2188,24 @@ func getFilteredDevices() []BlockDevice {
 		if d.Tran != nil {
 			tran = *d.Tran
 		}
+		if tran == "sata" || tran == "scsi" {
+			continue
+		}
 
 		dt := "Disk"
 		if strings.HasPrefix(d.Name, "nvme") {
 			dt = "NVMe"
+		} else if strings.HasPrefix(d.Name, "mmcblk") {
+			dt = "eMMC/SD"
+			cardType, _ := os.ReadFile(filepath.Join("/sys/class/block", d.Name, "device/type"))
+			switch strings.TrimSpace(string(cardType)) {
+			case "MMC":
+				dt = "eMMC"
+			case "SD":
+				dt = "SD"
+			}
 		} else if tran == "usb" {
 			dt = "USB"
-		} else if tran == "sata" || tran == "scsi" {
-			dt = "SATA/SCSI"
 		}
 
 		sizeBytes, _ := d.Size.Int64()
@@ -2569,7 +2221,7 @@ func getFilteredDevices() []BlockDevice {
 	}
 
 	if len(result) == 0 {
-		return getMockDevices()
+		result = getMockDevices()
 	}
 	return result
 }
@@ -2604,29 +2256,29 @@ type StoragePartition struct {
 }
 
 type StorageSmart struct {
-	Available bool              `json:"available"`
-	Model     string            `json:"model"`
-	Serial    string            `json:"serial"`
-	Firmware  string            `json:"firmware"`
-	Capacity  string            `json:"capacity"`
-	Temp      string            `json:"temp"`
-	Hours     string            `json:"hours"`
+	Available   bool            `json:"available"`
+	Model       string          `json:"model"`
+	Serial      string          `json:"serial"`
+	Firmware    string          `json:"firmware"`
+	Capacity    string          `json:"capacity"`
+	Temp        string          `json:"temp"`
+	Hours       string          `json:"hours"`
 	PowerCycles string          `json:"powerCycles"`
-	Health    string            `json:"health"`
-	Protocol  string            `json:"protocol"`
-	Attrs     []SmartAttr       `json:"attrs"`
-	NvmeAttrs []NvmeSmartAttr   `json:"nvmeAttrs"`
-	RawFull   string            `json:"rawFull"`
-	Error     string            `json:"error,omitempty"`
+	Health      string          `json:"health"`
+	Protocol    string          `json:"protocol"`
+	Attrs       []SmartAttr     `json:"attrs"`
+	NvmeAttrs   []NvmeSmartAttr `json:"nvmeAttrs"`
+	RawFull     string          `json:"rawFull"`
+	Error       string          `json:"error,omitempty"`
 }
 
 type SmartAttr struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Value string `json:"value"`
-	Worst string `json:"worst"`
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Worst  string `json:"worst"`
 	Thresh string `json:"thresh"`
-	Raw   string `json:"raw"`
+	Raw    string `json:"raw"`
 }
 
 type NvmeSmartAttr struct {
@@ -2642,6 +2294,7 @@ type StorageDevice struct {
 	Transport  string             `json:"transport"`
 	Partitions []StoragePartition `json:"partitions"`
 	Smart      StorageSmart       `json:"smart"`
+	Emmc       *EmmcHealth        `json:"emmc,omitempty"`
 }
 
 type StorageResponse struct {
@@ -2650,36 +2303,36 @@ type StorageResponse struct {
 }
 
 type CpuInfo struct {
-	Model       string  `json:"model"`
-	Cores       int     `json:"cores"`
-	Kernel      string  `json:"kernel"`
-	Uptime      string  `json:"uptime"`
-	LoadAvg1    float64 `json:"loadAvg1"`
-	LoadAvg5    float64 `json:"loadAvg5"`
-	LoadAvg15   float64 `json:"loadAvg15"`
-	CpuUsage    float64 `json:"cpuUsage"`
-	MemTotal    int64   `json:"memTotal"`
-	MemFree     int64   `json:"memFree"`
-	MemUsed     int64   `json:"memUsed"`
-	MemUsage    float64 `json:"memUsage"`
-	SwapTotal   int64   `json:"swapTotal"`
-	SwapFree    int64   `json:"swapFree"`
-	SwapUsed    int64   `json:"swapUsed"`
-	Temp        string  `json:"temp"`
-	Arch        string  `json:"arch"`
-	Hostname    string  `json:"hostname"`
+	Model     string  `json:"model"`
+	Cores     int     `json:"cores"`
+	Kernel    string  `json:"kernel"`
+	Uptime    string  `json:"uptime"`
+	LoadAvg1  float64 `json:"loadAvg1"`
+	LoadAvg5  float64 `json:"loadAvg5"`
+	LoadAvg15 float64 `json:"loadAvg15"`
+	CpuUsage  float64 `json:"cpuUsage"`
+	MemTotal  int64   `json:"memTotal"`
+	MemFree   int64   `json:"memFree"`
+	MemUsed   int64   `json:"memUsed"`
+	MemUsage  float64 `json:"memUsage"`
+	SwapTotal int64   `json:"swapTotal"`
+	SwapFree  int64   `json:"swapFree"`
+	SwapUsed  int64   `json:"swapUsed"`
+	Temp      string  `json:"temp"`
+	Arch      string  `json:"arch"`
+	Hostname  string  `json:"hostname"`
 }
 
 type NetInterface struct {
-	Name      string `json:"name"`
-	Ip        string `json:"ip"`
-	Mac       string `json:"mac"`
-	Speed     string `json:"speed"`
-	Status    string `json:"status"`
-	Type      string `json:"type"`
-	RxBytes   int64  `json:"rxBytes"`
-	TxBytes   int64  `json:"txBytes"`
-	Link      string `json:"link"`
+	Name    string `json:"name"`
+	Ip      string `json:"ip"`
+	Mac     string `json:"mac"`
+	Speed   string `json:"speed"`
+	Status  string `json:"status"`
+	Type    string `json:"type"`
+	RxBytes int64  `json:"rxBytes"`
+	TxBytes int64  `json:"txBytes"`
+	Link    string `json:"link"`
 }
 
 type NetworkInfo struct {
@@ -2816,7 +2469,7 @@ func handleCpu(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	out, _ = os.ReadFile("/proc/sys/kernel/arch") 
+	out, _ = os.ReadFile("/proc/sys/kernel/arch")
 	if len(out) > 0 {
 		info.Arch = strings.TrimSpace(string(out))
 	}
@@ -2830,39 +2483,26 @@ func handleCpu(w http.ResponseWriter, r *http.Request) {
 func handleNetwork(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var interfaces []NetInterface
+	interfaces := make([]NetInterface, 0)
 
-	out, err := exec.Command("ip", "-o", "addr", "show").Output()
+	devices, err := net.Interfaces()
 	if err != nil {
-		json.NewEncoder(w).Encode(NetworkInfo{Error: "ip 命令执行失败: " + err.Error()})
+		json.NewEncoder(w).Encode(NetworkInfo{Error: "读取网络接口失败: " + err.Error()})
 		return
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
+	for _, device := range devices {
+		name := device.Name
+		if device.Flags&net.FlagLoopback != 0 {
 			continue
 		}
-		name := fields[1]
-		if name == "lo" {
+		netType, physical := hardwareInterfaceType("/sys/class/net", name)
+		if !physical {
 			continue
 		}
-
-		ip := ""
-		for i := 3; i < len(fields)-1; i++ {
-			if fields[i] == "inet" {
-				ip = fields[i+1]
-				if idx := strings.Index(ip, "/"); idx > 0 {
-					ip = ip[:idx]
-				}
-				break
-			}
-		}
-
-		mac := ""
-		macOut, _ := exec.Command("cat", "/sys/class/net/"+name+"/address").Output()
-		mac = strings.TrimSpace(string(macOut))
+		addresses, _ := device.Addrs()
+		ip := interfaceAddress(addresses)
+		mac := device.HardwareAddr.String()
 
 		operstate := "down"
 		stateOut, _ := os.ReadFile("/sys/class/net/" + name + "/operstate")
@@ -2870,24 +2510,28 @@ func handleNetwork(w http.ResponseWriter, r *http.Request) {
 			operstate = strings.TrimSpace(string(stateOut))
 		}
 		status := "已连接"
-		if operstate != "up" {
+		carrier, _ := os.ReadFile("/sys/class/net/" + name + "/carrier")
+		if operstate != "up" || strings.TrimSpace(string(carrier)) != "1" {
 			status = "未连接"
 		}
 
-		netType := "以太网"
-		if strings.HasPrefix(name, "wlan") || strings.HasPrefix(name, "wlp") {
-			netType = "无线"
-		} else if strings.HasPrefix(name, "usb") {
-			netType = "USB"
-		} else if strings.HasPrefix(name, "eth") || strings.HasPrefix(name, "en") {
-			netType = "以太网"
+		if netType == "无线" {
+			info := networkCommand("iw", "dev", name, "info")
+			var wirelessLink, apStatus string
+			switch wirelessMode(info) {
+			case "managed":
+				wirelessLink = networkCommand("iw", "dev", name, "link")
+			case "AP":
+				apStatus = networkCommand("hostapd_cli", "-p", "/run/hostapd", "-i", name, "status")
+			}
+			status = wirelessInterfaceStatus(operstate, info, wirelessLink, apStatus)
 		}
 
 		speed := ""
 		speedOut, _ := os.ReadFile("/sys/class/net/" + name + "/speed")
 		if len(speedOut) > 0 {
 			s := strings.TrimSpace(string(speedOut))
-			if s != "" && s != "Unknown" {
+			if value, err := strconv.Atoi(s); err == nil && value > 0 {
 				speed = s + " Mbps"
 			}
 		}
@@ -2944,42 +2588,46 @@ func handleStorage(w http.ResponseWriter, r *http.Request) {
 func detectStorageDevices() ([]StorageDevice, error) {
 	var devices []StorageDevice
 
-	out, err := exec.Command("lsblk", "-b", "-d", "-n", "-o", "NAME,SIZE,MODEL,ROTA,TRAN").Output()
+	out, err := exec.Command("lsblk", "-b", "-d", "-n", "-J", "-o", "NAME,SIZE,TYPE,MODEL,TRAN").Output()
 	if err != nil {
 		return nil, fmt.Errorf("lsblk 执行失败: %v", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
-			continue
-		}
-		name := fields[0]
-		if strings.HasPrefix(name, "sr") || strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "zram") {
+	var disks LsblkOutput
+	if err := json.Unmarshal(out, &disks); err != nil {
+		return nil, fmt.Errorf("解析存储设备失败: %v", err)
+	}
+	for _, disk := range disks.BlockDevices {
+		name := disk.Name
+		if disk.Type != "disk" || !wholeDiskName.MatchString(name) {
 			continue
 		}
 
-		sizeBytes, _ := strconv.ParseInt(fields[1], 10, 64)
-		rota := fields[2]
+		sizeBytes, _ := disk.Size.Int64()
 		transport := ""
-		if len(fields) >= 5 {
-			transport = fields[4]
+		if disk.Tran != nil {
+			transport = *disk.Tran
 		}
 		model := ""
-		if len(fields) >= 4 {
-			model = strings.Join(fields[3:len(fields)-1], " ")
-			if len(fields) >= 5 {
-				model = strings.Join(fields[3:], " ")
-			}
+		if disk.Model != nil {
+			model = strings.TrimSpace(*disk.Model)
 		}
 
-		devType := "HDD"
-		if rota == "0" {
-			devType = "SSD"
+		devType := "Disk"
+		if strings.HasPrefix(name, "nvme") {
+			devType = "NVMe"
 		}
 		if transport == "usb" {
 			devType = "USB"
+		}
+		emmc := readEmmcHealth("/sys/class/block", name)
+		if emmc != nil {
+			devType, transport = "eMMC", "mmc"
+			if model == "" {
+				model = emmc.Name
+			}
+		} else if strings.HasPrefix(name, "mmcblk") {
+			devType = "SD"
 		}
 
 		device := "/dev/" + name
@@ -2989,10 +2637,15 @@ func detectStorageDevices() ([]StorageDevice, error) {
 			Size:      formatBytes(sizeBytes),
 			Type:      devType,
 			Transport: transport,
+			Emmc:      emmc,
 		}
 
 		dev.Partitions = getPartitions(device)
-		dev.Smart = getSmartInfo(device)
+		if emmc == nil && devType != "SD" {
+			dev.Smart = getSmartInfo(device)
+		} else if devType == "SD" {
+			dev.Smart.Error = "SD 卡不提供标准 SMART 健康信息"
+		}
 
 		devices = append(devices, dev)
 	}
@@ -3115,7 +2768,7 @@ func getSmartInfo(device string) StorageSmart {
 		return info
 	}
 
-	info.Protocol = "SATA"
+	info.Protocol = "Unknown"
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "Model Family:") || strings.HasPrefix(line, "Device Model:") || strings.HasPrefix(line, "Model Number:") {
@@ -3243,12 +2896,12 @@ func parseSmartAttrs(text string) []SmartAttr {
 				continue
 			}
 			attrs = append(attrs, SmartAttr{
-				ID:    id,
-				Name:  fields[1],
-				Value: fields[2],
-				Worst: fields[3],
+				ID:     id,
+				Name:   fields[1],
+				Value:  fields[2],
+				Worst:  fields[3],
 				Thresh: fields[4],
-				Raw:   strings.Join(fields[9:], " "),
+				Raw:    strings.Join(fields[9:], " "),
 			})
 		}
 	}
@@ -3258,7 +2911,7 @@ func parseSmartAttrs(text string) []SmartAttr {
 // ============ Update Helper ============
 
 const (
-	githubReleaseAPI = "https://api.github.com/repos/yifengyou/BDY_G98_RK3588/releases/tags/spi_recovery_uboot2026"
+	githubReleaseAPI = "https://api.github.com/repos/dqsq2e2/iflytek_rk3588_aiui/releases"
 	updateTmpFile    = "/tmp/update.img"
 	updateTargetDev  = "/dev/mtdblock0"
 )
@@ -3272,10 +2925,10 @@ type GithubAsset struct {
 }
 
 type GithubRelease struct {
-	TagName  string        `json:"tag_name"`
-	Name     string        `json:"name"`
-	Body     string        `json:"body"`
-	Assets   []GithubAsset `json:"assets"`
+	TagName string        `json:"tag_name"`
+	Name    string        `json:"name"`
+	Body    string        `json:"body"`
+	Assets  []GithubAsset `json:"assets"`
 }
 
 func handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
@@ -3483,7 +3136,7 @@ func startUpdateTask(downloadURL string) {
 			updateProgress.mu.Unlock()
 		}()
 
-		advLog("info", "开始下载更新镜像: " + downloadURL)
+		advLog("info", "开始下载更新镜像: %s", downloadURL)
 
 		client := &http.Client{
 			Timeout: 30 * time.Minute,
@@ -3623,7 +3276,7 @@ func startUpdateTask(downloadURL string) {
 		updateProgress.Eta = 0
 		updateProgress.mu.Unlock()
 
-		advLog("info", "开始同步写入 " + updateTargetDev)
+		advLog("info", "开始同步写入 "+updateTargetDev)
 		devFile, err := os.OpenFile(updateTargetDev, os.O_WRONLY|os.O_SYNC, 0)
 		if err != nil {
 			updateProgress.mu.Lock()
@@ -3805,7 +3458,7 @@ func handleUpdateUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	advLog("info", "收到上传更新文件: " + header.Filename + " (" + formatBytes(header.Size) + ")")
+	advLog("info", "收到上传更新文件: %s (%s)", header.Filename, formatBytes(header.Size))
 
 	tmpPath := updateTmpFile
 	f, err := os.Create(tmpPath)
@@ -3848,7 +3501,7 @@ func handleUpdateUpload(w http.ResponseWriter, r *http.Request) {
 			updateProgress.mu.Unlock()
 		}()
 
-		advLog("info", "开始同步写入 " + updateTargetDev)
+		advLog("info", "开始同步写入 "+updateTargetDev)
 		devFile, err := os.OpenFile(updateTargetDev, os.O_WRONLY|os.O_SYNC, 0)
 		if err != nil {
 			updateProgress.mu.Lock()
@@ -3971,7 +3624,7 @@ func handleBackupDisks(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		name := fields[0]
-		if strings.HasPrefix(name, "sr") || strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "zram") {
+		if !wholeDiskName.MatchString(name) {
 			continue
 		}
 
@@ -4028,6 +3681,11 @@ func handleBackupStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "非法设备路径", http.StatusBadRequest)
 		return
 	}
+	if !releaseWriteMu.TryLock() {
+		http.Error(w, "已有刷写、备份或升级任务", http.StatusConflict)
+		return
+	}
+	defer releaseWriteMu.Unlock()
 
 	backupProgress.mu.Lock()
 	if backupProgress.Running {
@@ -4282,10 +3940,19 @@ func handleRestoreStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "缺少 disk 参数", http.StatusBadRequest)
 		return
 	}
-	if !strings.HasPrefix(disk, "/dev/") {
+	if err := validateFlashTarget(disk); err != nil {
 		http.Error(w, "非法设备路径", http.StatusBadRequest)
 		return
 	}
+	if isSystemSlotTarget(disk) {
+		http.Error(w, "eMMC 系统请从固件刷写页面写入，保留引导和恢复系统", http.StatusBadRequest)
+		return
+	}
+	if !releaseWriteMu.TryLock() {
+		http.Error(w, "已有写入任务", http.StatusConflict)
+		return
+	}
+	defer releaseWriteMu.Unlock()
 
 	backupProgress.mu.Lock()
 	if backupProgress.Running {
@@ -4446,13 +4113,13 @@ type FwRule struct {
 }
 
 type FwStatus struct {
-	Enabled    bool      `json:"enabled"`
-	InputPolicy string   `json:"inputPolicy"`
-	ForwardPolicy string  `json:"forwardPolicy"`
-	InputRules []FwRule  `json:"inputRules"`
-	ForwardRules []FwRule `json:"forwardRules"`
-	NatRules   []FwRule  `json:"natRules"`
-	Error      string    `json:"error,omitempty"`
+	Enabled       bool     `json:"enabled"`
+	InputPolicy   string   `json:"inputPolicy"`
+	ForwardPolicy string   `json:"forwardPolicy"`
+	InputRules    []FwRule `json:"inputRules"`
+	ForwardRules  []FwRule `json:"forwardRules"`
+	NatRules      []FwRule `json:"natRules"`
+	Error         string   `json:"error,omitempty"`
 }
 
 func runIptables(args ...string) (string, error) {
@@ -4597,14 +4264,14 @@ func handleFirewallApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Chain    string `json:"chain"`
-		Action   string `json:"action"`
-		Protocol string `json:"protocol"`
-		SrcIP    string `json:"srcIP"`
-		DstIP    string `json:"dstIP"`
-		DstPort  string `json:"dstPort"`
+		Chain     string `json:"chain"`
+		Action    string `json:"action"`
+		Protocol  string `json:"protocol"`
+		SrcIP     string `json:"srcIP"`
+		DstIP     string `json:"dstIP"`
+		DstPort   string `json:"dstPort"`
 		NatTarget string `json:"natTarget"`
-		Comment  string `json:"comment"`
+		Comment   string `json:"comment"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "参数解析失败: " + err.Error()})
@@ -4775,4 +4442,3 @@ func handleFirewallToggle(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
 }
-

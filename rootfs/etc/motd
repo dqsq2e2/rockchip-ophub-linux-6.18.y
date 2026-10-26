@@ -1,13 +1,5 @@
 
-***************************************************************
-*                    Welcome to RKdev System                  *
-*                                                             *
-*  OS: Alpine Linux (RK3588)                                  *
-*  Kernel: 6.18.y                                             *
-*  IP: http://192.168.98.1/                                   *
-*                                                             *
-*  Documentation: https://github.com/yifengyou/BDY_G98_RK3588 *
-*                                                             *
-*  Authorized access only. All activities are monitored.      *
-***************************************************************
+rk3588 AIUI Recovery
+Web: http://192.168.88.1/
+SSH / serial login: root / root
 

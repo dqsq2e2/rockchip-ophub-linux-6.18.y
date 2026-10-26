@@ -15,7 +15,7 @@ make ARCH=arm64 \
   KBUILD_BUILD_USER="builder" \
   KBUILD_BUILD_HOST="kdevbuilder" \
   LOCALVERSION=-kdev \
-  bdy_g98_rk3588_defconfig
+  rk3588_aiui_recovery_defconfig
 
 # check kver
 KVER=$(make LOCALVERSION=-kdev kernelrelease)
@@ -86,7 +86,7 @@ mkdir -p recovery
 xz --format=lzma -k -c arch/arm64/boot/Image > recovery/kernel.lzma
 ls -alh recovery/kernel.lzma
 # dtb
-cp -a arch/arm64/boot/dts/rockchip/rk3588-bdy-g98.dtb recovery/
+cp -a arch/arm64/boot/dts/rockchip/rk3588-AIUI.dtb recovery/
 cd recovery
 
 dd if=/dev/zero of=recovery.img bs=1M count=28
@@ -102,14 +102,14 @@ mkfs.ext4 \
 
 mount recovery.img /mnt
 df -h
-cp -a rk3588-bdy-g98.dtb /mnt/
+cp -a rk3588-AIUI.dtb /mnt/
 cp -a kernel-uImage.lzma /mnt
 df -h
 
 tee /mnt/recovery.conf << 'EOF'
-label RK3588 Linux recovery
+label rk3588 AIUI Recovery
     kernel kernel-uImage.lzma
-    fdt rk3588-bdy-g98.dtb
+    fdt rk3588-AIUI.dtb
     append console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000 rootwait rw iommu.passthrough=1
 EOF
 
