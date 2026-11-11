@@ -1,0 +1,6 @@
+::sysinit:/usr/sbin/phx-start
+ttyS2::respawn:/sbin/getty -L 115200 ttyS2 vt100
+tty1::respawn:/sbin/getty 38400 tty1
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/sync
+::shutdown:/bin/umount -a -r

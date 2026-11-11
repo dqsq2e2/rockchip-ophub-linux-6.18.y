@@ -1,0 +1,26 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+mkdir -p /run/sshd /var/empty
+chmod 755 /var/empty
+syslogd -C256
+mdev -s
+for module in r8169 dwmac-rk phy-rockchip-usbdp gpio-fan rockchip_canfd brcmfmac brcmfmac_wcc brcmfmac_cyw hci_uart btbcm snd_soc_rt5640; do
+    modprobe "$module" 2>/dev/null || :
+done
+ip link set wlan0 up 2>/dev/null || :
+if [ -s /etc/wpa_supplicant/wpa_supplicant.conf ]; then
+    wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf -P /run/wpa_supplicant.pid
+    udhcpc -b -i wlan0 -p /run/udhcpc-wlan0.pid >/tmp/udhcpc-wlan0.log 2>&1 &
+fi
+ip link set lo up
+for interface in /sys/class/net/eth*; do
+    [ -d "$interface" ] || continue
+    name=${interface##*/}
+    ip link set "$name" up
+    udhcpc -b -i "$name" -p "/run/udhcpc-$name.pid" \
+        >"/tmp/udhcpc-$name.log" 2>&1 &
+done
+ssh-keygen -A
+/usr/sbin/sshd
+/rkdev_arm64 >/tmp/rkdev-console.log 2>&1 &
+echo 'PHX-R3588 Recovery: root / root'

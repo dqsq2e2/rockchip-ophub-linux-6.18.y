@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-theme','dark');</script>
-    <title>讯飞rk3588 AIUI固件更新助手 - RKdev</title>
+    <title>PHX-R3588固件更新助手 - RKdev</title>
     <link rel="stylesheet" href="/res/xterm.min.css">
     <script src="/res/xterm.min.js"></script>
     <script src="/res/addon-fit.min.js"></script>
@@ -587,11 +587,11 @@
             <div style="text-align:center;margin-bottom:16px;">
                 <img src="/res/logo.png" alt="RKdev" style="width:150px;height:150px;border-radius:20px;object-fit:cover;box-shadow:0 4px 16px rgba(0,0,0,.2);">
             </div>
-            <h2 style="text-align:center;color:var(--accent);font-size:20px;margin:0 0 6px 0;">rk3588 AIUI 恢复助手</h2>
+            <h2 style="text-align:center;color:var(--accent);font-size:20px;margin:0 0 6px 0;">PHX-R3588 恢复助手</h2>
             <p style="text-align:center;color:var(--text-muted);font-size:14px;margin:0 0 4px 0;">RK3588 固件刷写与系统维护</p>
             <p style="text-align:center;font-size:13px;margin:0 0 4px 0;color:var(--text-muted);">英文名称：<span style="color:var(--accent);font-weight:700;">RKdev (Rockchip Kernel Developer)</span></p>
             <p class="about-version">版本: <span class="ver-tag">v{{.BuildTime}}</span></p>
-            <p class="about-desc">适用于 rk3588 AIUI 的恢复与维护系统，支持固件刷写、存储健康检测、整盘备份还原和终端访问。基于 RKdev 开源项目适配。</p>
+            <p class="about-desc">适用于 PHX-R3588 的恢复与维护系统，支持固件刷写、存储健康检测、整盘备份还原和终端访问。基于 RKdev 开源项目适配。</p>
             <div class="about-section">
                 <h3>📋 功能说明</h3>
                 <ul>
@@ -646,7 +646,7 @@
     <div class="adv-layout">
         <div class="adv-top">
             <div class="card">
-                <h1>讯飞rk3588 AIUI固件更新助手 <span class="ver-tag">v{{.BuildTime}}</span></h1>
+                <h1>PHX-R3588固件更新助手 <span class="ver-tag">v{{.BuildTime}}</span></h1>
                 <p class="subtitle">选择目标存储设备，上传固件文件即可一键刷写</p>
                 <p class="format-desc">支持 <span class="fmt">.img / .bin</span> 单文件固件，支持常见压缩文件，支持多分区打包固件<span class="fmt-note">（自动解压并解析分区表）</span>。</p>
 
@@ -994,7 +994,7 @@
         </div>
         <div class="update-section">
             <div class="update-section-title">📤 上传更新</div>
-            <div class="update-warning-box">更新期间请勿断电、重启或关闭浏览器。仅支持 rk3588 AIUI 配套 IMG，保留已安装的系统和引导顺序。</div>
+            <div class="update-warning-box">更新期间请勿断电、重启或关闭浏览器。仅支持 PHX-R3588 配套 IMG，保留已安装的系统和引导顺序。</div>
         <form onsubmit="upgradeRecovery(event)">
             <div class="recovery-fields">
                 <label class="recovery-field update-upload-area" id="recovery-upload-area" for="recovery-image">

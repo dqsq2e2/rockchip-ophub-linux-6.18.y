@@ -2474,6 +2474,16 @@ brcmf_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		devinfo->ci = NULL;
 		goto fail;
 	}
+	/* A stale or invalid bank description must not escape the TCM BAR. */
+	if (devinfo->ci->ramsize < 4 ||
+	    devinfo->ci->rambase > pci_resource_len(pdev, 2) ||
+	    devinfo->ci->ramsize >
+		pci_resource_len(pdev, 2) - devinfo->ci->rambase) {
+		dev_err(&pdev->dev, "RAM range %#x+%#x exceeds TCM BAR\n",
+			devinfo->ci->rambase, devinfo->ci->ramsize);
+		ret = -EINVAL;
+		goto fail;
+	}
 
 	core = brcmf_chip_get_core(devinfo->ci, BCMA_CORE_PCIE2);
 	if (core->rev >= 64)

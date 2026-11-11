@@ -151,7 +151,7 @@ func logRequests(next http.Handler) http.Handler {
 		p := r.URL.Path
 		switch p {
 		case "/api/update_check", "/api/update_download", "/api/update_cancel", "/api/update_upload":
-			http.Error(w, "rk3588 AIUI updates are installed through the system-slot flash workflow", http.StatusNotImplemented)
+			http.Error(w, "PHX-R3588 updates are installed through the system-slot flash workflow", http.StatusNotImplemented)
 			return
 		}
 		if p != "/api/progress" && p != "/api/upload_status" && p != "/api/logs" && !strings.HasPrefix(p, "/res/") {
@@ -466,9 +466,6 @@ type LsblkDevice struct {
 
 func main() {
 	initLogging()
-	if err := installBootScanner(); err != nil {
-		log.Printf("引导扫描命令未更新: %v", err)
-	}
 
 	tmpl := template.Must(template.New("index").Parse(indexHTML))
 
@@ -684,23 +681,23 @@ const (
 
 var ubootDefaultVars = map[string]string{
 	"arch":               "arm",
-	"baudrate":           "1500000",
-	"boot_one_dev":       "run try_extlinux_boot; run try_bootscr_boot; run try_rockchip_fw; ",
+	"baudrate":           "115200",
 	"boot_targets":       "usb nvme mmc1 mmc0",
 	"bootcmd":            "if test \"${recovery_key}\" = \"1\"; then setenv recovery_key; run recovery_boot; else run boot_system; fi",
 	"bootdelay":          "3",
 	"boot_system":        "run boot_system_usb; run boot_system_nvme; run boot_system_sd; run boot_system_emmc; run recovery_boot",
-	"boot_system_usb":    "usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run lunzn_scan; fi; done",
-	"boot_system_nvme":   "pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run lunzn_scan; fi; done",
-	"boot_system_sd":     "setenv devtype mmc; setenv devnum 1; mmc dev 1; if mmc rescan; then run lunzn_scan; fi",
-	"boot_system_emmc":   "setenv devtype mmc; setenv devnum 0; mmc dev 0; if mmc rescan; then run lunzn_scan; fi",
-	"lunzn_scan":         lunznScan,
-	"lunzn_boot_part":    lunznBootPart,
-	"recovery_boot":      "echo rk3588 AIUI Recovery; mmc dev 0; if mmc rescan; then sysboot mmc 0:1 any ${scriptaddr} /extlinux/extlinux.conf; fi",
+	"boot_system_usb":    "usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run phx_scan; fi; done",
+	"boot_system_nvme":   "pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run phx_scan; fi; done",
+	"boot_system_sd":     "setenv devtype mmc; setenv devnum 1; mmc dev 1; if mmc rescan; then run phx_scan; fi",
+	"boot_system_emmc":   "setenv devtype mmc; setenv devnum 0; mmc dev 0; if mmc rescan; then run phx_scan; fi",
+	"phx_scan":           phxScan,
+	"phx_boot_part":      phxBootPart,
+	"phx_recovery_part":  phxRecoveryPart,
+	"recovery_boot":      phxRecoveryBoot,
 	"recovery_key":       "0",
 	"cpu":                "armv8",
 	"fdt_addr_r":         "0x12000000",
-	"fdtfile":            "rockchip/rk3588-AIUI.dtb",
+	"fdtfile":            "rockchip/rk3588-phx-r3588.dtb",
 	"fdtoverlay_addr_r":  "0x12100000",
 	"kernel_addr_r":      "0x02000000",
 	"kernel_comp_addr_r": "0x0a000000",
@@ -713,10 +710,6 @@ var ubootDefaultVars = map[string]string{
 	"scriptaddr":         "0x00c00000",
 	"soc":                "rk3588",
 	"vendor":             "rockchip",
-	"try_bootscr_boot":   "for distro_bootpart in 1 2 3 4 8 5 6 7 9; do for prefix in / /boot/; do echo Try ${devtype} ${devnum}:${distro_bootpart} ${prefix}boot.scr; if test -e ${devtype} ${devnum}:${distro_bootpart} ${prefix}boot.scr; then echo Found boot.scr on ${devtype} ${devnum}:${distro_bootpart}; load ${devtype} ${devnum}:${distro_bootpart} ${scriptaddr} ${prefix}boot.scr; source ${scriptaddr}; echo boot.scr returned, trying next...; fi; done; done; ",
-	"try_extlinux_boot":  "for distro_bootpart in 1 2 3 4 8 5 6 7 9; do for extlinux_path in /boot/extlinux/extlinux.conf /extlinux/extlinux.conf /extlinux.conf; do echo Try ${devtype} ${devnum}:${distro_bootpart} ${extlinux_path}; if test -e ${devtype} ${devnum}:${distro_bootpart} ${extlinux_path}; then echo Found extlinux.conf on ${devtype} ${devnum}:${distro_bootpart}; sysboot ${devtype} ${devnum}:${distro_bootpart} any ${scriptaddr} ${extlinux_path}; echo sysboot returned, trying next...; fi; done; done; ",
-	"try_recovery_boot":  "echo Recovery: scanning ${devtype} ${devnum}; if test -e ${devtype} ${devnum}:1 /recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:1; sysboot ${devtype} ${devnum}:1 any ${scriptaddr} /recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:1 /boot/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:1; sysboot ${devtype} ${devnum}:1 any ${scriptaddr} /boot/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:1 /recovery/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:1; sysboot ${devtype} ${devnum}:1 any ${scriptaddr} /recovery/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:2 /recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:2; sysboot ${devtype} ${devnum}:2 any ${scriptaddr} /recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:2 /boot/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:2; sysboot ${devtype} ${devnum}:2 any ${scriptaddr} /boot/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:2 /recovery/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:2; sysboot ${devtype} ${devnum}:2 any ${scriptaddr} /recovery/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:3 /recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:3; sysboot ${devtype} ${devnum}:3 any ${scriptaddr} /recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:3 /boot/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:3; sysboot ${devtype} ${devnum}:3 any ${scriptaddr} /boot/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:3 /recovery/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:3; sysboot ${devtype} ${devnum}:3 any ${scriptaddr} /recovery/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:4 /recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:4; sysboot ${devtype} ${devnum}:4 any ${scriptaddr} /recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:4 /boot/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:4; sysboot ${devtype} ${devnum}:4 any ${scriptaddr} /boot/recovery.conf; echo sysboot returned, trying next...; fi; if test -e ${devtype} ${devnum}:4 /recovery/recovery.conf; then echo Found recovery.conf on ${devtype} ${devnum}:4; sysboot ${devtype} ${devnum}:4 any ${scriptaddr} /recovery/recovery.conf; echo sysboot returned, trying next...; fi; echo Recovery scan complete, no valid recovery.conf found; ",
-	"try_rockchip_fw":    "mw.l 0x01fffff8 0 1; mw.l 0x04fffff8 0 1; mw.l 0x07000000 0 1; read ${devtype} ${devnum}:5 0x01fffff8 0 0x14000; if itest.l *0x01fffff8 == 0x4c4e524b; then echo RKFW: KRNL kernel found on ${devtype} ${devnum}:5; read ${devtype} ${devnum}:6 0x04fffff8 0 0x10000; read ${devtype} ${devnum}:4 0x07000000 0 0x1000; if itest.l *0x04fffff8 == 0x4c4e524b && itest.l *0x07000000 == 0x45435352 && itest.l *0x07000800 == 0xedfe0dd0; then echo RKFW: booting rockchip firmware from ${devtype} ${devnum}; if part uuid ${devtype} ${devnum}:8 rkfw_uuid; then setenv rkfw_root root=PARTUUID=${rkfw_uuid}; elif test ${devtype} = nvme; then setenv rkfw_root root=/dev/nvme0n1p8; else setenv rkfw_root root=/dev/mmcblk${devnum}p8; fi; setenv bootargs ${rkfw_root} rootfstype=ext4 rootwait rw console=ttyS2,1500000n8 earlycon=uart8250,mmio32,0xfeb50000; booti 0x02000000 0x05000000:0x2000000 0x07000800; fi; fi; ",
 }
 
 // UbootVar 表示一个 U-Boot 环境变量
@@ -752,8 +745,22 @@ func ensureFwEnvConfig() error {
 	if _, err := os.Stat(mmcEnvDevice); err != nil {
 		return fmt.Errorf("未检测到 %s，无法访问 U-Boot 环境变量", mmcEnvDevice)
 	}
+	parts, err := readGPT(mmcEnvDevice)
+	if err != nil {
+		return fmt.Errorf("无法验证环境变量保留区: %w", err)
+	}
+	if err := validateEnvironmentLayout(parts); err != nil {
+		return err
+	}
 
-	if _, err := os.Stat(fwEnvConfig); err != nil {
+	content, err := os.ReadFile(fwEnvConfig)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil && strings.TrimSpace(string(content)) != fwEnvContent {
+		return fmt.Errorf("%s 与配套环境变量保留区不匹配，拒绝访问", fwEnvConfig)
+	}
+	if os.IsNotExist(err) {
 		advLog("warn", "[UBOOT] %s 不存在，写入默认配置: %s", fwEnvConfig, fwEnvContent)
 		if err := os.WriteFile(fwEnvConfig, []byte(fwEnvContent+"\n"), 0644); err != nil {
 			return fmt.Errorf("写入 %s 失败: %v", fwEnvConfig, err)
@@ -2911,7 +2918,7 @@ func parseSmartAttrs(text string) []SmartAttr {
 // ============ Update Helper ============
 
 const (
-	githubReleaseAPI = "https://api.github.com/repos/dqsq2e2/iflytek_rk3588_aiui/releases"
+	githubReleaseAPI = "https://api.github.com/repos/dqsq2e2/rockchip-ophub-linux-6.18.y/releases"
 	updateTmpFile    = "/tmp/update.img"
 	updateTargetDev  = "/dev/mtdblock0"
 )

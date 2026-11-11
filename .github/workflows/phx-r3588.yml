@@ -1,0 +1,44 @@
+name: PHX R3588 recovery kernel
+on:
+  push:
+    branches: [phx-r3588-recovery]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: rkdev/go.mod
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu bc bison flex libssl-dev libelf-dev cpio dwarves rsync kmod
+      - name: Test and build recovery application
+        working-directory: rkdev
+        run: |
+          mkdir -p ../output
+          go test ./...
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../output/rkdev_arm64 .
+      - name: Build board kernel and modules
+        env:
+          ARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
+          KBUILD_BUILD_USER: builder
+          KBUILD_BUILD_HOST: phx-recovery
+        run: |
+          make O="$RUNNER_TEMP/kernel" phx_r3588_recovery_defconfig
+          make O="$RUNNER_TEMP/kernel" -j"$(nproc)" Image modules rockchip/rk3588-phx-r3588.dtb
+          make O="$RUNNER_TEMP/kernel" INSTALL_MOD_PATH="$RUNNER_TEMP/modules" modules_install
+          cp "$RUNNER_TEMP/kernel/arch/arm64/boot/Image" "$RUNNER_TEMP/kernel/arch/arm64/boot/dts/rockchip/rk3588-phx-r3588.dtb" output/
+          cp "$RUNNER_TEMP/kernel/.config" output/kernel.config
+          make -s O="$RUNNER_TEMP/kernel" kernelrelease > output/kernel.release
+          tar -C "$RUNNER_TEMP/modules" -czf output/modules.tar.gz lib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phx-r3588-recovery-kernel
+          path: output/
+          if-no-files-found: error

@@ -74,9 +74,9 @@ func TestPairedCopyBoundaries(t *testing.T) {
 }
 
 func TestReleasePackageValidation(t *testing.T) {
-	path := os.Getenv("LUNZN_TEST_RELEASE_IMAGE")
+	path := os.Getenv("PHX_TEST_RELEASE_IMAGE")
 	if path == "" {
-		path = "../release-10.26/rk3588-AIUI-recovery-10.26.img"
+		path = "../release-10.26/rk3588-phx-r3588-recovery-10.26.img"
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Skip("release package not built")

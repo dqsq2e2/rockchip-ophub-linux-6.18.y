@@ -103,7 +103,7 @@ func readGPTReader(f io.ReaderAt) ([]gptPartition, error) {
 
 func recoveryPartition(parts []gptPartition) (gptPartition, error) {
 	for _, part := range parts {
-		if part.Number == 1 && part.Start == 65536 && part.End == 524253 && part.Name == "LUNZN_RECOVERY" {
+		if part.Number == 1 && part.Start == 65536 && part.End == 524253 && part.Name == "PHX_RECOVERY" {
 			for _, other := range parts {
 				if other.Number != 1 && other.Start < systemStartSector {
 					return gptPartition{}, fmt.Errorf("eMMC 系统区域布局不匹配")
@@ -168,7 +168,7 @@ func planSystemArea(path string, diskSectors uint64, current []gptPartition) ([]
 	id[7] = (id[7] & 0x0f) | 0x40
 	id[8] = (id[8] & 0x3f) | 0x80
 	part := gptPartition{Number: 2, Start: systemStartSector, End: diskSectors - gptBackupSectors - 1,
-		Type: "0fc63daf-8483-4772-8e79-3d69d8477de4", UUID: gptGUID(id), Name: "LUNZN_SYSTEM"}
+		Type: "0fc63daf-8483-4772-8e79-3d69d8477de4", UUID: gptGUID(id), Name: "PHX_SYSTEM"}
 	return []gptPartition{part}, []FlashWriteItem{{Name: "system", Offset: int64(systemStartSector * 512),
 		Size: info.Size(), Path: path}}, nil
 }

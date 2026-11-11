@@ -31,8 +31,8 @@ func TestSystemAreaMultiPartitionImage(t *testing.T) {
 	}
 	dir := t.TempDir()
 	target, source := filepath.Join(dir, "emmc.img"), filepath.Join(dir, "system.img")
-	sparseDisk(t, target, 1024*1024*1024, "-o", "-n", "1:65536:524253", "-c", "1:LUNZN_RECOVERY",
-		"-n", "2:524288:0", "-c", "2:LUNZN_SYSTEM")
+	sparseDisk(t, target, 1024*1024*1024, "-o", "-n", "1:65536:524253", "-c", "1:PHX_RECOVERY",
+		"-n", "2:524288:0", "-c", "2:PHX_SYSTEM")
 	sparseDisk(t, source, 16*1024*1024, "-o", "-n", "1:2048:4095", "-c", "1:BOOT",
 		"-A", "1:set:0", "-A", "1:set:60", "-n", "2:4096:8191", "-c", "2:rootfs")
 	old, err := readGPT(target)
@@ -118,15 +118,15 @@ func TestSystemAreaDoesNotWriteSourceLoader(t *testing.T) {
 }
 
 func TestSystemAreaReleaseImage(t *testing.T) {
-	source := os.Getenv("LUNZN_TEST_SYSTEM_IMAGE")
+	source := os.Getenv("PHX_TEST_SYSTEM_IMAGE")
 	if source == "" {
-		t.Skip("set LUNZN_TEST_SYSTEM_IMAGE to verify a real system image")
+		t.Skip("set PHX_TEST_SYSTEM_IMAGE to verify a real system image")
 	}
 	target := filepath.Join(t.TempDir(), "emmc.img")
 	const sectors = uint64(122142720)
 	sparseDisk(t, target, int64(sectors*512), "-o",
-		"-n", "1:65536:524253", "-c", "1:LUNZN_RECOVERY",
-		"-n", "2:524288:0", "-c", "2:LUNZN_SYSTEM")
+		"-n", "1:65536:524253", "-c", "1:PHX_RECOVERY",
+		"-n", "2:524288:0", "-c", "2:PHX_SYSTEM")
 	current, err := readGPT(target)
 	if err != nil {
 		t.Fatal(err)
@@ -174,9 +174,13 @@ func TestNetworkAddressGrouping(t *testing.T) {
 }
 
 func TestBootCommandsMatchBuiltEnvironment(t *testing.T) {
-	data, err := os.ReadFile("../../uboot-mainline/initial-env.txt")
+	path := os.Getenv("PHX_UBOOT_INITIAL_ENV")
+	if path == "" {
+		t.Skip("PHX_UBOOT_INITIAL_ENV not set")
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Skip("U-Boot not built")
+		t.Fatal(err)
 	}
 	values := make(map[string]string)
 	for _, line := range strings.Split(string(data), "\n") {
@@ -185,7 +189,7 @@ func TestBootCommandsMatchBuiltEnvironment(t *testing.T) {
 		}
 	}
 	normalize := func(value string) string { return strings.Join(strings.Fields(value), " ") }
-	for _, key := range []string{"boot_system_usb", "boot_system_nvme", "boot_system_sd", "boot_system_emmc", "lunzn_scan", "lunzn_boot_part"} {
+	for _, key := range []string{"boot_system_usb", "boot_system_nvme", "boot_system_sd", "boot_system_emmc", "phx_scan", "phx_boot_part", "phx_recovery_part", "recovery_boot"} {
 		if normalize(values[key]) != normalize(ubootDefaultVars[key]) {
 			t.Errorf("%s differs from built U-Boot", key)
 		}

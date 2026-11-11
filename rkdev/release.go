@@ -101,7 +101,7 @@ func handleRecoveryUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer src.Close()
-	f, err := os.CreateTemp("/tmp", "lunzn-boot-recovery-*.img")
+	f, err := os.CreateTemp("/tmp", "phx-boot-recovery-*.img")
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -223,9 +223,9 @@ func validateReleaseImage(path string) error {
 		last := binary.LittleEndian.Uint64(e[40:48])
 		name := strings.TrimRight(string(utf16Bytes(e[56:128])), "\x00")
 		switch name {
-		case "LUNZN_RECOVERY":
+		case "PHX_RECOVERY":
 			foundRecovery = first == 65536 && last == 524253
-		case "LUNZN_SYSTEM":
+		case "PHX_SYSTEM":
 			foundSystem = first == 524288 && last > first
 		}
 	}
@@ -239,7 +239,7 @@ func validateReleaseImage(path string) error {
 	if _, err := f.ReadAt(magic, 0x800000); err != nil || binary.BigEndian.Uint32(magic) != 0xd00dfeed {
 		return fmt.Errorf("配套镜像缺少 U-Boot FIT")
 	}
-	part, err := os.CreateTemp("/tmp", "lunzn-verify-*.ext4")
+	part, err := os.CreateTemp("/tmp", "phx-verify-*.ext4")
 	if err != nil {
 		return err
 	}
@@ -254,13 +254,13 @@ func validateReleaseImage(path string) error {
 		return err
 	}
 	label, err := exec.Command("blkid", "-p", "-s", "LABEL", "-o", "value", part.Name()).Output()
-	if err != nil || strings.TrimSpace(string(label)) != "LUNZN_RECOVERY" {
+	if err != nil || strings.TrimSpace(string(label)) != "PHX_RECOVERY" {
 		return fmt.Errorf("恢复分区标签不正确")
 	}
 	if err := exec.Command("e2fsck", "-fn", part.Name()).Run(); err != nil {
 		return fmt.Errorf("恢复分区文件系统校验失败")
 	}
-	for _, name := range []string{"/Image", "/initramfs.cpio.gz", "/extlinux/extlinux.conf", "/dtb/rockchip/rk3588-AIUI.dtb", "/release.json"} {
+	for _, name := range []string{"/Image", "/initramfs.cpio.gz", "/extlinux/extlinux.conf", "/dtb/rockchip/rk3588-phx-r3588.dtb", "/release.json"} {
 		out, err := exec.Command("debugfs", "-R", "stat "+name, part.Name()).CombinedOutput()
 		if err != nil || !strings.Contains(string(out), "Inode:") {
 			return fmt.Errorf("恢复分区缺少 %s", name)

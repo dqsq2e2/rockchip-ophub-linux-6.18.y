@@ -35,7 +35,7 @@ func testStreamReceiver(t *testing.T, threshold, capacity int64) *firmwareReceiv
 		t.Fatal(err)
 	}
 	spool := filepath.Join(dir, "upload", "unpack")
-	if parent := os.Getenv("LUNZN_TEST_STREAM_SPOOL_DIR"); parent != "" {
+	if parent := os.Getenv("PHX_TEST_STREAM_SPOOL_DIR"); parent != "" {
 		spool, err = os.MkdirTemp(parent, "stream-spool-")
 		if err != nil {
 			t.Fatal(err)
@@ -304,8 +304,8 @@ func TestStreamSystemAreaProtection(t *testing.T) {
 	sparseDisk(t, source, 16<<20, "-o", "-n", "1:2048:8191", "-c", "1:BOOT", "-A", "1:set:60")
 	data, _ := os.ReadFile(source)
 	u := testStreamReceiver(t, 1<<20, 512<<20)
-	if out, err := exec.Command("sgdisk", "-o", "-n", "1:65536:524253", "-c", "1:LUNZN_RECOVERY",
-		"-n", "2:524288:0", "-c", "2:LUNZN_SYSTEM", u.target.path).CombinedOutput(); err != nil {
+	if out, err := exec.Command("sgdisk", "-o", "-n", "1:65536:524253", "-c", "1:PHX_RECOVERY",
+		"-n", "2:524288:0", "-c", "2:PHX_SYSTEM", u.target.path).CombinedOutput(); err != nil {
 		t.Fatalf("target: %v: %s", err, out)
 	}
 	current, err := readGPT(u.target.path)
@@ -446,9 +446,9 @@ func TestUploadWriteReservation(t *testing.T) {
 }
 
 func TestRealLargeStreamImage(t *testing.T) {
-	path := os.Getenv("LUNZN_TEST_STREAM_IMAGE")
+	path := os.Getenv("PHX_TEST_STREAM_IMAGE")
 	if path == "" {
-		t.Skip("set LUNZN_TEST_STREAM_IMAGE for full-size stream test")
+		t.Skip("set PHX_TEST_STREAM_IMAGE for full-size stream test")
 	}
 	source, err := os.Open(path)
 	if err != nil {
@@ -480,7 +480,7 @@ func TestRealLargeStreamImage(t *testing.T) {
 func assertIndependentImageHash(t *testing.T, u *firmwareReceiver, sourcePath string) {
 	t.Helper()
 	if sourcePath == "" {
-		t.Fatal("set LUNZN_TEST_STREAM_IMAGE to independently validate decoded image bytes")
+		t.Fatal("set PHX_TEST_STREAM_IMAGE to independently validate decoded image bytes")
 	}
 	source, err := os.Open(sourcePath)
 	if err != nil {
@@ -514,9 +514,9 @@ func TestGPTStreamSizeOverflow(t *testing.T) {
 }
 
 func TestRealLargeStreamArchive(t *testing.T) {
-	path := os.Getenv("LUNZN_TEST_STREAM_ARCHIVE")
+	path := os.Getenv("PHX_TEST_STREAM_ARCHIVE")
 	if path == "" {
-		t.Skip("set LUNZN_TEST_STREAM_ARCHIVE for full-size archive test")
+		t.Skip("set PHX_TEST_STREAM_ARCHIVE for full-size archive test")
 	}
 	source, err := os.Open(path)
 	if err != nil {
@@ -534,7 +534,7 @@ func TestRealLargeStreamArchive(t *testing.T) {
 	if err := u.direct.verify(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	assertIndependentImageHash(t, u, os.Getenv("LUNZN_TEST_STREAM_IMAGE"))
+	assertIndependentImageHash(t, u, os.Getenv("PHX_TEST_STREAM_IMAGE"))
 	files, _ := os.ReadDir(u.dir)
 	if len(files) != 0 {
 		t.Fatal("real expanded image staged in tmp")

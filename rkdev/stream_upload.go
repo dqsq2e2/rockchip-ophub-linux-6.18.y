@@ -247,7 +247,7 @@ func beginStreamImage(target *streamTarget, prefix []byte, expected int64) (*str
 			}
 			id[7], id[8] = id[7]&0x0f|0x40, id[8]&0x3f|0x80
 			s.nextGPT = []gptPartition{{Number: 2, Start: systemStartSector,
-				End: target.sectors - gptBackupSectors - 1, Name: "LUNZN_SYSTEM",
+				End: target.sectors - gptBackupSectors - 1, Name: "PHX_SYSTEM",
 				Type: "0fc63daf-8483-4772-8e79-3d69d8477de4", UUID: gptGUID(id)}}
 		}
 	}

@@ -1,0 +1,18 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+/bin/busybox --install -s
+mkdir -p /proc /sys /dev /run /tmp
+mount -t proc -o nosuid,nodev,noexec proc /proc
+mount -t sysfs -o nosuid,nodev,noexec sysfs /sys
+mount -t devtmpfs -o mode=0755 devtmpfs /dev
+mkdir -p /dev/pts /dev/shm
+mount -t devpts -o gid=5,mode=0620 devpts /dev/pts
+mount -t tmpfs -o mode=1777,nosuid,nodev shm /dev/shm
+mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run
+mount -t tmpfs -o mode=1777,nosuid,nodev,size=70% tmpfs /tmp
+build_epoch=$(cat /etc/phx-build-epoch)
+if [ "$(date -u +%s)" -lt "$build_epoch" ]; then
+    date -u -s "@$build_epoch"
+fi
+hostname phx-r3588-recovery
+exec /sbin/init

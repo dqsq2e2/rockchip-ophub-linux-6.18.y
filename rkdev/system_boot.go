@@ -99,7 +99,7 @@ func replaceBootFile(path string, data []byte) error {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("启动配置不是普通文件: %s", path)
 	}
-	file, err := os.CreateTemp(filepath.Dir(path), ".lunzn-boot-*")
+	file, err := os.CreateTemp(filepath.Dir(path), ".phx-boot-*")
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func adaptSystemBootPartitions(task *FlashTask, source []gptPartition) error {
 		default:
 			continue
 		}
-		mountpoint, err := os.MkdirTemp("/tmp", "lunzn-system-boot-*")
+		mountpoint, err := os.MkdirTemp("/tmp", "phx-system-boot-*")
 		if err != nil {
 			return err
 		}
