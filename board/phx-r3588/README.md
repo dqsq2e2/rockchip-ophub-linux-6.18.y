@@ -23,6 +23,11 @@ builds the kernel, creates the initramfs and writes a 512 MiB raw disk
 image. Artifacts include the recovery filesystem separately for disk
 composition and updates.
 
+The full image and CI use `scripts/build-phx-r3588-app.sh` to inject the
+application's UTC build date (`YYYY.MM.DD`). Set `SOURCE_DATE_EPOCH` to
+reproduce that version date. A plain `go build` omits this metadata and
+retains the application's development default, `unknown`.
+
 ## Layout and operation
 
 The loader begins at LBA 64. Redundant 128 KiB environments begin at

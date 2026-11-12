@@ -51,7 +51,8 @@ chmod 600 "$root/etc/shadow"
 chmod 1777 "$root/tmp" "$root/var/tmp"
 chroot "$root" /bin/sh -n /init
 chroot "$root" /bin/sh -n /usr/sbin/phx-start
-(cd "$repo/rkdev" && go test ./... && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$root/rkdev_arm64" .)
+(cd "$repo/rkdev" && go test ./...)
+bash "$repo/scripts/build-phx-r3588-app.sh" "$root/rkdev_arm64"
 cp "$work/kernel/arch/arm64/boot/Image" "$boot/Image"
 cp "$work/kernel/arch/arm64/boot/dts/rockchip/rk3588-phx-r3588.dtb" "$boot/dtb/rockchip/"
 cp "$repo/board/phx-r3588/extlinux.conf" "$boot/extlinux/"

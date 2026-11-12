@@ -22,7 +22,7 @@ jobs:
         run: |
           mkdir -p ../output
           go test ./...
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../output/rkdev_arm64 .
+          bash ../scripts/build-phx-r3588-app.sh ../output/rkdev_arm64
       - name: Build board kernel and modules
         env:
           ARCH: arm64
