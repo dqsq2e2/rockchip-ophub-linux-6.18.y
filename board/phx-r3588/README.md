@@ -27,10 +27,17 @@ composition and updates.
 
 The loader begins at LBA 64. Redundant 128 KiB environments begin at
 LBA 32768 and 33024. Partition 1 is `PHX_RECOVERY`, LBA 65536..524253.
-The complete system disk image is embedded at LBA 524288; its partitions
-are projected into the outer GPT with their type, UUID and attributes
-preserved. This keeps the system visible to ordinary U-Boot and Linux
-partition readers. The recovery application validates the layout before
+The recovery disk image is independently bootable and initially contains
+an empty system area. A separate system disk image may include its own
+loader and boot/root partitions, without a recovery partition. It can be
+flashed directly from LBA 0, or uploaded through this recovery system.
+
+When uploaded to eMMC, the complete system image is written at LBA 524288;
+its partitions are projected into the outer GPT with their type, UUID and
+attributes preserved. The outer loader, environment and recovery
+filesystem are retained. The embedded system loader is inert in this mode.
+This keeps the system visible to ordinary U-Boot and Linux partition
+readers. The recovery application validates the layout before
 accessing the U-Boot environment. Starting the application never writes
 the environment or a factory partition automatically.
 
