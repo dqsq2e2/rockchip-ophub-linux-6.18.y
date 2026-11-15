@@ -1,18 +1,15 @@
-# BDY_G98_RK3588-kernel
+# 9Tripod I3588 恢复系统
 
-This repository contains the kernel source code for BGY G98/Z98 RK3588, adapted from [ophub/linux-6.18.y](https://github.com/ophub/linux-6.18.y).
+本分支适配九鼎 I3588（RK3588）的 Linux 6.18 恢复内核、设备树与网页刷写助手。它与 PHX-R3588、AIUI、G98 是不同板型，不能混用设备树或固件。
 
-For documentation and usage guides, please visit: [yifengyou/BDY_G98_RK3588](https://github.com/yifengyou/BDY_G98_RK3588)
+## 构建与安装
 
-本仓库为 彼度云 G98/Z98 RK3588 内核源代码，基于 [ophub/linux-6.18.y](https://github.com/ophub/linux-6.18.y) 进行适配与修改。
+内核配置为 `i3588_recovery_defconfig`，设备树为 `rockchip/rk3588-9tripod-I3588.dtb`。完整镜像通过 `scripts/build-i3588.sh` 构建；依赖、交叉构建条件、板载固件路径和系统分区映射说明见 [板级文档](board/9tripod-i3588/README.md)。GitHub Actions 构建并测试恢复程序、内核、模块及设备树。
 
-文档及使用指南请参见：[yifengyou/BDY_G98_RK3588](https://github.com/yifengyou/BDY_G98_RK3588)
+恢复镜像与系统镜像是两个独立的 raw GPT 整盘 IMG，均包含对应的主线 U-Boot。恢复镜像启动后可通过网页安装系统：完整系统放在 LBA 524288，其分区映射到外层 GPT，保留恢复分区；也可把系统 IMG 直接从 LBA 0 写入整盘。它们不是瑞芯微 RKFW `update.img`。配套 [U-Boot 分支](https://github.com/dqsq2e2/rockchip-uboot-mainline/tree/9tripod-i3588)。
 
+## 按键与验证
 
-## 更新日志
+SW1 VOL+/RECOVERY 配置为检测到 USB 主机握手时请求 Maskrom，否则进入已安装的恢复系统；SW7 BOOT 硬件直接进入 Maskrom；SW5 为电源、SW6 为复位、SW2 为音量减。物理按键与线缆组合尚未实测。恢复串口为 1500000 baud，恢复 SSH/串口默认 root/root。
 
-
-* 开源RKDevTool刷机工具：新增基于Golang开发的跨平台RKDevTool Web刷机工具，代码100%开源，为用户提供灵活、可定制的固件烧录方案。
-* 轻量级Recovery系统：采用专属recovery defconfig进行最小化编译配置，将Recovery镜像体积精准控制在26MB以内，可稳定运行于出厂标配的32MB SPI Nor Flash存储介质中。
-* 双存储介质适配：针对SPI Nor Flash与eMMC在硬件层面的物理引脚冲突问题，分别提供两套独立的配置方案，构建系统自动输出对应的两版固件镜像，用户可根据实际硬件选型按需选择使用。
-
+只对 eMMC 做过存储启动测试，NVMe、SATA、USB、TF 的实际启动尚未验证。HDMI RX 的 160 MiB 池可复用为 CMA；采集仍需 HDMI 输入信号验证。
