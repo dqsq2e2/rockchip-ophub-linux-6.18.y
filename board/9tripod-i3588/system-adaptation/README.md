@@ -69,9 +69,26 @@ system at sector 524288, and maps the inner partitions into the outer GPT.
 Raw images here are not Rockchip RKFW/update.img containers; choose raw
 whole-disk/LBA writing in compatible flashing tools.
 
-eMMC whole-disk startup has been tested. See the board validation report for
-the current recovery-install and peripheral evidence. External NVMe, SATA,
-USB and TF boot require actual media tests. Bluetooth firmware loading alone
-does not establish a working controller; IEP ROI allocation remains under
-investigation. Optional external display/camera panels require their own
-panel-specific wiring and timing configuration.
+Both eMMC whole-disk writing and the recovery application's real upload
+installation have been tested. See the board validation report for the
+tested image hashes and cold-boot checks. Storage testing is limited to eMMC
+by user instruction; external NVMe, SATA, USB and TF boot remains untested.
+
+The codec's I2S0 TX/RX source clocks use GPLL. Display initialization changes
+AUPLL after the initial codec clock setup, otherwise invalidating the codec
+MCLK before sound-card registration. Cold boot and 44.1/48 kHz ALSA playback
+and capture DMA passed; physical jack loopback has not been tested.
+
+The distribution network service owns Bluetooth's HCI USER_CHANNEL while
+advertising. Stopping it temporarily allowed an actual BLE scan (seven device
+events in eight seconds); the service was restored afterward. Pairing and
+data transfer remain untested. The vendor IEP module prints its ROI failure
+message on a non-NULL allocation; cold-boot I5O2 hardware deinterlacing passed
+ten iterations with twenty verified output frames without reloading it.
+
+The follow-up recovery CI 43670263615 passed the application tests and board
+kernel/module build after the codec generator update.
+
+Optional external display/camera panels require their own panel-specific
+wiring and timing configuration. Hardware workload results do not establish
+electrical validation of unconnected peripherals.
