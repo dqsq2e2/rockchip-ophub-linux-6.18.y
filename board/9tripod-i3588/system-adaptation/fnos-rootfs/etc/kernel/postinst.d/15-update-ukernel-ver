@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+exec /usr/local/sbin/9tripod-I3588-kernel-queue "${1:-}"

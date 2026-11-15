@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+version=${1:-}
+case "$version" in *[!a-zA-Z0-9._+-]*|"") exit 2 ;; esac
+mkdir -p /var/lib/9tripod-I3588-kernel/pending
+touch "/var/lib/9tripod-I3588-kernel/pending/$version"
+if [ -d /run/systemd/system ]; then
+    systemctl start --no-block 9tripod-I3588-kernel-maintain.service || true
+fi

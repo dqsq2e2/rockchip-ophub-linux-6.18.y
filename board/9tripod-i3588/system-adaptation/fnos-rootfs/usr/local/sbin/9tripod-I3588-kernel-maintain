@@ -1,0 +1,80 @@
+#!/bin/sh
+set -eu
+
+version=${1:-}
+case "$version" in
+    *[!a-zA-Z0-9._+-]*|"") exit 2 ;;
+esac
+modules="/lib/modules/$version"
+pending=/var/lib/9tripod-I3588-kernel/pending
+mkdir -p /run/lock "$pending"
+exec 9>/run/lock/9tripod-I3588-kernel.lock
+flock 9
+
+touch "$pending/$version"
+for required in Makefile Module.symvers include/generated/autoconf.h include/config/auto.conf; do
+    if [ ! -s "$modules/build/$required" ]; then
+        echo "9Tripod I3588: headers for $version are incomplete; keeping the current boot configuration." >&2
+        exit 0
+    fi
+done
+test -s "/boot/vmlinuz-$version" || exit 0
+test -s "/boot/config-$version" || exit 0
+config="/boot/config-$version"
+
+# A future distribution kernel may already provide one of these drivers.
+# In that case DKMS excludes it and the in-tree driver is authoritative.
+driver_requirements='9tripod-I3588-gpio-fan:CONFIG_SENSORS_GPIO_FAN 9tripod-I3588-rockchip-canfd:CONFIG_CAN_ROCKCHIP_CANFD 9tripod-I3588-panthor:CONFIG_DRM_PANTHOR 9tripod-I3588-st-accel:CONFIG_IIO_ST_ACCEL_I2C_3AXIS 9tripod-I3588-hdmirx:CONFIG_VIDEO_SYNOPSYS_HDMIRX'
+
+if [ ! -f "$modules/build/.config" ] && [ -f "/boot/config-$version" ]; then
+    cp "/boot/config-$version" "$modules/build/.config"
+fi
+# The distribution links every modules_trim subdirectory into updates/trim.
+# Some images include an "alternatives" link without that optional directory.
+# Remove only this exact dangling link; real alternative drivers stay intact.
+optional="$modules/updates/trim/alternatives"
+if [ -L "$optional" ] && [ ! -e "$optional" ] && \
+    [ "$(readlink "$optional")" = "/usr/lib/modules_trim/$version/alternatives" ]; then
+    rm "$optional"
+fi
+
+dkms autoinstall -k "$version"
+for requirement in $driver_requirements; do
+    module=${requirement%%:*}
+    option=${requirement#*:}
+    if grep -Eq "^$option=[ym]$" "$config"; then
+        continue
+    fi
+    if ! dkms status -m "$module" -v 1.0.0 -k "$version" | grep -F "$version," | grep -Fq ': installed'; then
+        echo "9Tripod I3588: $module is not installed for $version" >&2
+        exit 1
+    fi
+done
+depmod -a "$version"
+if [ ! -f "/boot/initrd.img-$version" ]; then
+    update-initramfs -c -k "$version"
+else
+    update-initramfs -u -k "$version"
+fi
+test -s "/boot/initrd.img-$version"
+current=$(sed -n 's/^kernelfile=vmlinuz-//p' /boot/fnEnv.txt | tail -n 1)
+if [ -n "$current" ] && dpkg --compare-versions "$version" lt "$current"; then
+    rm -f "$pending/$version"
+    exit 0
+fi
+dtb=/usr/share/9tripod-I3588/rk3588-9tripod-I3588.dtb
+test -s "$dtb"
+install -D -m 0644 "$dtb" /boot/dtb/rockchip/rk3588-9tripod-I3588.dtb
+# Commit all version-dependent settings in one rename. A power interruption
+# must not pair a new kernel with the previous kernel's initramfs.
+temporary=$(mktemp /boot/.fnEnv.txt.XXXXXX)
+trap 'rm -f "$temporary"' EXIT HUP INT TERM
+sed '/^fdtfile=/d; /^kernelfile=/d; /^initrdfile=/d' /boot/fnEnv.txt > "$temporary"
+printf '%s\n' 'fdtfile=rockchip/rk3588-9tripod-I3588.dtb' \
+    "kernelfile=vmlinuz-$version" "initrdfile=initrd.img-$version" >> "$temporary"
+chmod --reference=/boot/fnEnv.txt "$temporary"
+sync
+mv -f "$temporary" /boot/fnEnv.txt
+trap - EXIT HUP INT TERM
+rm -f "$pending/$version"
+sync

@@ -15,7 +15,7 @@ func TestEnvironmentAccessRejectsFactoryBootPartition(t *testing.T) {
 
 func TestEnvironmentAccessRequiresReservedRecoveryLayout(t *testing.T) {
 	parts := []gptPartition{
-		{Number: 1, Start: 65536, End: 524253, Name: "PHX_RECOVERY"},
+		{Number: 1, Start: 65536, End: 524253, Name: "I3588_RECOVERY"},
 		{Number: 2, Start: 589824, End: 900000, Name: "system-boot"},
 	}
 	if err := validateEnvironmentLayout(parts); err != nil {

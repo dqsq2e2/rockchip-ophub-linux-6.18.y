@@ -151,7 +151,7 @@ func logRequests(next http.Handler) http.Handler {
 		p := r.URL.Path
 		switch p {
 		case "/api/update_check", "/api/update_download", "/api/update_cancel", "/api/update_upload":
-			http.Error(w, "PHX-R3588 updates are installed through the system-slot flash workflow", http.StatusNotImplemented)
+			http.Error(w, "9Tripod I3588 updates are installed through the system-slot flash workflow", http.StatusNotImplemented)
 			return
 		}
 		if p != "/api/progress" && p != "/api/upload_status" && p != "/api/logs" && !strings.HasPrefix(p, "/res/") {
@@ -680,36 +680,37 @@ const (
 )
 
 var ubootDefaultVars = map[string]string{
-	"arch":               "arm",
-	"baudrate":           "115200",
-	"boot_targets":       "usb nvme mmc1 mmc0",
-	"bootcmd":            "if test \"${recovery_key}\" = \"1\"; then setenv recovery_key; run recovery_boot; else run boot_system; fi",
-	"bootdelay":          "3",
-	"boot_system":        "run boot_system_usb; run boot_system_nvme; run boot_system_sd; run boot_system_emmc; run recovery_boot",
-	"boot_system_usb":    "usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run phx_scan; fi; done",
-	"boot_system_nvme":   "pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run phx_scan; fi; done",
-	"boot_system_sd":     "setenv devtype mmc; setenv devnum 1; mmc dev 1; if mmc rescan; then run phx_scan; fi",
-	"boot_system_emmc":   "setenv devtype mmc; setenv devnum 0; mmc dev 0; if mmc rescan; then run phx_scan; fi",
-	"phx_scan":           phxScan,
-	"phx_boot_part":      phxBootPart,
-	"phx_recovery_part":  phxRecoveryPart,
-	"recovery_boot":      phxRecoveryBoot,
-	"recovery_key":       "0",
-	"cpu":                "armv8",
-	"fdt_addr_r":         "0x12000000",
-	"fdtfile":            "rockchip/rk3588-phx-r3588.dtb",
-	"fdtoverlay_addr_r":  "0x12100000",
-	"kernel_addr_r":      "0x02000000",
-	"kernel_comp_addr_r": "0x0a000000",
-	"kernel_comp_size":   "0x8000000",
-	"loadaddr":           "0xc00800",
-	"pxefile_addr_r":     "0x00e00000",
-	"ramdisk_addr_r":     "0x12180000",
-	"script_offset_f":    "0xffe000",
-	"script_size_f":      "0x2000",
-	"scriptaddr":         "0x00c00000",
-	"soc":                "rk3588",
-	"vendor":             "rockchip",
+	"arch":                "arm",
+	"baudrate":            "1500000",
+	"boot_targets":        "usb nvme scsi mmc1 mmc0",
+	"bootcmd":             "if test \"${recovery_key}\" = \"1\"; then setenv recovery_key; run recovery_boot; else run boot_system; fi",
+	"bootdelay":           "3",
+	"boot_system":         "run boot_system_usb; run boot_system_nvme; run boot_system_sata; run boot_system_sd; run boot_system_emmc; run recovery_boot",
+	"boot_system_usb":     "usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run i3588_scan; fi; done",
+	"boot_system_nvme":    "pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run i3588_scan; fi; done",
+	"boot_system_sata":    "scsi scan; setenv devtype scsi; for devnum in 0 1; do if scsi dev ${devnum}; then run i3588_scan; fi; done",
+	"boot_system_sd":      "setenv devtype mmc; setenv devnum 1; mmc dev 1; if mmc rescan; then run i3588_scan; fi",
+	"boot_system_emmc":    "setenv devtype mmc; setenv devnum 0; mmc dev 0; if mmc rescan; then run i3588_scan; fi",
+	"i3588_scan":          i3588Scan,
+	"i3588_boot_part":     i3588BootPart,
+	"i3588_recovery_part": i3588RecoveryPart,
+	"recovery_boot":       i3588RecoveryBoot,
+	"recovery_key":        "0",
+	"cpu":                 "armv8",
+	"fdt_addr_r":          "0x12000000",
+	"fdtfile":             "rockchip/rk3588-9tripod-I3588.dtb",
+	"fdtoverlay_addr_r":   "0x12100000",
+	"kernel_addr_r":       "0x02000000",
+	"kernel_comp_addr_r":  "0x0a000000",
+	"kernel_comp_size":    "0x8000000",
+	"loadaddr":            "0xc00800",
+	"pxefile_addr_r":      "0x00e00000",
+	"ramdisk_addr_r":      "0x12180000",
+	"script_offset_f":     "0xffe000",
+	"script_size_f":       "0x2000",
+	"scriptaddr":          "0x00c00000",
+	"soc":                 "rk3588",
+	"vendor":              "rockchip",
 }
 
 // UbootVar 表示一个 U-Boot 环境变量
@@ -734,6 +735,7 @@ var bootCmdTokens = []struct {
 }{
 	{"boot_system_usb", "USB", "usb"},
 	{"boot_system_nvme", "NVMe", "nvme"},
+	{"boot_system_sata", "SATA", "sata"},
 	{"boot_system_sd", "SD", "sd"},
 	{"boot_system_emmc", "eMMC", "emmc"},
 	{"recovery_boot", "Recovery", "recovery"},
@@ -934,6 +936,8 @@ func setenvBootSystemOrder(order []string) error {
 			parts = append(parts, "run boot_system_usb")
 		case "nvme":
 			parts = append(parts, "run boot_system_nvme")
+		case "sata":
+			parts = append(parts, "run boot_system_sata")
 		case "sd":
 			parts = append(parts, "run boot_system_sd")
 		case "emmc":

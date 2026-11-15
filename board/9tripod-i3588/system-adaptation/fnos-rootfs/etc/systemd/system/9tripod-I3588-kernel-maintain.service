@@ -1,0 +1,9 @@
+[Unit]
+Description=Prepare 9Tripod I3588 kernel modules and boot files
+After=local-fs.target
+ConditionPathIsDirectory=/var/lib/9tripod-I3588-kernel/pending
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/9tripod-I3588-kernel-worker
+TimeoutStartSec=30min

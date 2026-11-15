@@ -1,0 +1,12 @@
+[Unit]
+Description=Generate unique SSH host keys for this installation
+Before=ssh.service sshd.service
+After=local-fs.target
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+
+[Install]
+WantedBy=multi-user.target

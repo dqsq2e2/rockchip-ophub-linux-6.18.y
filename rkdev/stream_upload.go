@@ -247,7 +247,7 @@ func beginStreamImage(target *streamTarget, prefix []byte, expected int64) (*str
 			}
 			id[7], id[8] = id[7]&0x0f|0x40, id[8]&0x3f|0x80
 			s.nextGPT = []gptPartition{{Number: 2, Start: systemStartSector,
-				End: target.sectors - gptBackupSectors - 1, Name: "PHX_SYSTEM",
+				End: target.sectors - gptBackupSectors - 1, Name: "I3588_SYSTEM",
 				Type: "0fc63daf-8483-4772-8e79-3d69d8477de4", UUID: gptGUID(id)}}
 		}
 	}
@@ -832,7 +832,13 @@ func (runtime firmwareUploadRuntime) serveHTTP(w http.ResponseWriter, r *http.Re
 		updateTask(s.task.ID, func(t *FlashTask) {
 			t.Status, t.Progress, t.Written, t.Total = "done", 100, s.written, s.written
 		})
-		jsonOK(w, map[string]string{"task_id": s.task.ID, "message": "流式直写完成，SHA256 读回校验通过"})
+		jsonOK(w, map[string]string{
+			"task_id": s.task.ID,
+			"message": "流式直写完成，SHA256 读回校验通过",
+			// This digest covers the original bytes before boot adaptation mounts
+			// the projected filesystems and changes their configuration/metadata.
+			"sha256": fmt.Sprintf("%x", s.hash.Sum(nil)),
+		})
 		return
 	}
 	task, message, err := buildTaskFromExtracted(receiver.files, receiver.dir, target.path)

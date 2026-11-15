@@ -1,0 +1,81 @@
+#!/usr/bin/python3
+"""Grow the mounted GPT root partition without replacing its identity."""
+import json
+import os
+from pathlib import Path
+import subprocess
+
+
+def run(*args):
+    return subprocess.check_output(args, text=True).strip()
+
+
+def table(disk):
+    result = json.loads(run('sfdisk', '--json', disk))['partitiontable']
+    if result['label'] != 'gpt' or result['unit'] != 'sectors':
+        raise RuntimeError('I3588 root growth requires GPT with sector units')
+    return result
+
+
+def finish():
+    for name in ('.trim-need_resize_rootfs', '.trim-need_resize_to_full_disk'):
+        Path('/' + name).unlink(missing_ok=True)
+    subprocess.run(['systemctl', 'disable', 'resize-rootfs.service'], check=False)
+
+
+def main():
+    source = run('findmnt', '-nro', 'SOURCE', '/').split('[', 1)[0]
+    root = os.path.realpath(source)
+    name = Path(root).name
+    sysblock = Path('/sys/class/block') / name
+    index = int((sysblock / 'partition').read_text())
+    disk = '/dev/' + sysblock.resolve().parent.name
+    if run('blkid', '-s', 'UUID', '-o', 'value', root) != '33d49f6b-b938-42a8-b209-2bd4a2785a8d':
+        raise RuntimeError('Unexpected root filesystem, refusing to resize')
+    before = table(disk)
+    parts = before['partitions']
+    part = next(p for p in parts if p['node'] == root)
+    if not part.get('uuid'):
+        raise RuntimeError('Root PARTUUID is missing')
+    if any(p['start'] > part['start'] for p in parts):
+        raise RuntimeError('Root must be the last partition')
+    fs = run('findmnt', '-nro', 'FSTYPE', '/')
+    if fs not in ('btrfs', 'ext4'):
+        raise RuntimeError('Unsupported root filesystem: ' + fs)
+    sector_size = int(before['sectorsize'])
+    disk_bytes = int(run('blockdev', '--getsize64', disk))
+    sectors = disk_bytes // sector_size
+    full = Path('/.trim-need_resize_to_full_disk').exists()
+    if not full and disk_bytes > 32 * 1024**3:
+        end = part['start'] + 28 * 1024**3 // sector_size
+    else:
+        end = sectors * 99 // 100
+    alignment = 16 * 1024**2 // sector_size
+    end = min(end, sectors - 34) // alignment * alignment - 1
+    size = end - part['start'] + 1
+    if size > part['size']:
+        backup = Path('/var/lib/9tripod-I3588-kernel/partition-before-growth.sfdisk')
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_text(run('sfdisk', '--dump', disk) + '\n')
+        subprocess.run(['sfdisk', '--no-reread', '--relocate', 'gpt-bak-std', disk], check=True)
+        subprocess.run(['sfdisk', '--no-reread', '-N', str(index), disk],
+                       input='size=' + str(size) + '\n', text=True, check=True)
+        after = table(disk)
+        expected = [dict(p, size=size) if p['node'] == root else p for p in parts]
+        if after['partitions'] != expected or after['id'] != before['id']:
+            raise RuntimeError('Partition identity changed during growth')
+        subprocess.run(['partx', '--update', '--nr', str(index), disk], check=True)
+    # Retry the filesystem step after an interrupted earlier partition growth.
+    if fs == 'btrfs':
+        subprocess.run(['btrfs', 'filesystem', 'resize', 'max', '/'], check=True)
+    else:
+        subprocess.run(['resize2fs', root], check=True)
+    if run('blkid', '-s', 'PARTUUID', '-o', 'value', root).lower() != part['uuid'].lower():
+        raise RuntimeError('Root PARTUUID changed')
+    os.sync()
+    finish()
+    print('I3588 root growth completed with all partition identities preserved')
+
+
+if __name__ == '__main__':
+    main()

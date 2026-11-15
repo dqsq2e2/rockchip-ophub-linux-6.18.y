@@ -1,0 +1,39 @@
+#!/usr/bin/python3
+"""Wait for dpkg transactions to finish before building board modules."""
+import fcntl
+import pathlib
+import subprocess
+from contextlib import ExitStack
+
+def run_pending(pending=pathlib.Path("/var/lib/9tripod-I3588-kernel/pending"),
+                lock_dir=pathlib.Path("/var/lib/dpkg"),
+                maintain="/usr/local/sbin/9tripod-I3588-kernel-maintain"):
+    if not pending.is_dir():
+        return 0
+    with ExitStack() as stack:
+        try:
+            # dpkg uses POSIX record locks. Retain them until the boot-file
+            # commit finishes so another transaction cannot replace headers
+            # during a build. The child never installs/configures packages;
+            # dpkg --compare-versions is a lock-free query.
+            for name in ("lock-frontend", "lock"):
+                handle = stack.enter_context((lock_dir / name).open("a"))
+                fcntl.lockf(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            # Hooks only enqueue. The timer retries after dpkg releases locks.
+            return 0
+        versions = [p.name for p in pending.iterdir() if p.is_file()]
+        if not versions:
+            return 0
+        ordered = subprocess.check_output(
+            ["sort", "-V"], input="\n".join(versions).encode()
+        ).decode().splitlines()
+        failed = False
+        for version in ordered:
+            result = subprocess.run([maintain, version], close_fds=True)
+            failed |= result.returncode != 0
+        return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_pending())

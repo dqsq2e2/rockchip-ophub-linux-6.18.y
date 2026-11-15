@@ -1,0 +1,10 @@
+[Unit]
+Description=Retry 9Tripod I3588 kernel preparation after package installation
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+Unit=9tripod-I3588-kernel-maintain.service
+
+[Install]
+WantedBy=timers.target
