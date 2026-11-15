@@ -71,8 +71,8 @@ whole-disk/LBA writing in compatible flashing tools.
 
 Both eMMC whole-disk writing and the recovery application's real upload
 installation have been tested. See the board validation report for the
-tested image hashes and cold-boot checks. Storage testing is limited to eMMC
-by user instruction; external NVMe, SATA, USB and TF boot remains untested.
+tested image hashes and cold-boot checks. eMMC boot has been tested; external
+NVMe, SATA, USB and TF boot remain untested.
 
 The codec's I2S0 TX/RX source clocks use GPLL. Display initialization changes
 AUPLL after the initial codec clock setup, otherwise invalidating the codec

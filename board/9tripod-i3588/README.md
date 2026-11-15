@@ -35,6 +35,5 @@ the local recovery URLs and refreshes them when the WAN address changes.
 SW1 (VOL+/RECOVERY) selects recovery without a USB host, or requests Maskrom
 after a USB host handshake. SW7 BOOT directly forces Maskrom in BootROM and
 is not the software recovery selector. SW5 is PMIC power, SW6 hardware reset,
-and SW2 volume-down. Storage tests are limited to eMMC by user request;
-external-media boot remains untested. Physical key behavior requires actual
-key presses.
+and SW2 volume-down. eMMC boot has been tested; NVMe, SATA, USB and TF boot
+remain untested. Physical key behavior requires actual key presses.

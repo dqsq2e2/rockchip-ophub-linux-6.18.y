@@ -2,7 +2,7 @@
 
 Tested hardware: 4 GB LPDDR4X CV1 core, BV2 carrier references,
 15,634,268,160-byte eMMC, CID150100414a5444345206a5434cc4b800.
-COM7/UART2 at1500000 baud. Storage testing is limited to eMMC by user instruction.
+UART2 at 1500000 baud. Storage boot tests cover eMMC.
 Original necessary partitions/files were backed up and checked, excluding user data/free space.
 
 | Check | Result |
@@ -36,7 +36,7 @@ Bluetooth's empty management lists during normal advertising reflect the
 network service's HCI USER_CHANNEL ownership; they do not establish a driver failure.
 
 Factory DDR1.08 is retained. Later DDR's extra high bank had repeatable
-errors on this unit; it is not shipped and is not evidence of a hardware lock.
+errors on this unit; the released images retain DDR v1.08.
 Pins: rkbin35c3e2e438d2a6983a958fd2d3a66076112bea23,
 TF-A a881364e03b0c5b3a8c00f20ad6fbdda53a57031.
 
@@ -56,7 +56,7 @@ firmware binaries, images, private keys or credentials.
 
 ## Physical limits
 
-- NVMe/SATA/USB/TF boot configured, not physically tested (eMMC-only scope).
+- NVMe/SATA/USB/TF boot configured, not physically tested.
 - SW7 BOOT grounds ADC0: unconditional BootROM Maskrom. SW1 VOL+/RECOVERY
   implements USB-host-handshake Maskrom/otherwise installed recovery.
   Physical button/cable combinations remain untested.
@@ -65,8 +65,7 @@ firmware binaries, images, private keys or credentials.
   HDMI RX input, GPU stress or NPU inference acceptance.
 - Display panels/cameras, CAN transceivers and fan electrical behavior need
   their corresponding physical equipment. Encoder DVFS remains unestablished.
-- SMART/UPS may report missing monitored devices with only eMMC/no UPS;
-  these services were not hidden or disabled to make the failed-unit list empty.
+- SMART/UPS require supported monitored devices; eMMC-only configurations without a UPS may report missing devices.
 
 Local evidence: _work/i3588-audio-recovery-flash.log,
 i3588-audio-recovery-coldboot.log, i3588-audio-mapped-install.log,
@@ -76,4 +75,3 @@ i3588-audio-direct-flash.log, i3588-audio-direct-coldboot.log,
 i3588-audio-direct-acceptance.json, i3588-audio-direct-pcm.log,
 i3588-release-clean-audit.json, i3588-bt-radio-test.log,
 i3588-iep-cold-hardware-test.log and i3588-kernel-update-tests.log.
-These limits distinguish software adaptation from unperformed peripheral electrical tests.
