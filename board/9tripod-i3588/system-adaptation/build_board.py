@@ -845,6 +845,16 @@ def main():
         if path in result:
             result[path]["status"]=b"disabled\0"
 
+    # Let Linux borrow the HDMI capture pool while it is idle. Keep the
+    # donor's pool size and placement constraints for the HDMI RX driver.
+    hdmi_cma = result["/reserved-memory/hdmi-receiver-cma"]
+    if b"shared-dma-pool\0" not in hdmi_cma["compatible"]:
+        raise RuntimeError("HDMI RX memory is not a shared DMA pool")
+    hdmi_cma.pop("no-map", None)
+    hdmi_cma["reusable"] = b""
+    report["changes"].append({"path": "/reserved-memory/hdmi-receiver-cma",
+        "property": "reusable"})
+
     # The factory firmware's memory banks exclude 0x08400000..0x09400000.
     # Chain-loaded mainline U-Boot rediscovers contiguous DRAM and otherwise
     # exposes this protected range to Linux. A 512 MiB tmpfs write then raises
