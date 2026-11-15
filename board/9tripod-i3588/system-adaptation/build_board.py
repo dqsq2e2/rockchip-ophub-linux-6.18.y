@@ -749,6 +749,15 @@ def main():
         cru = result["/clock-controller@fd7c0000"]["phandle"]
         result[codec]["clocks"] = cru + packed([new_clocks["I2S0_8CH_MCLKOUT"]])
     codec = "/i2c@fec90000/es8388@11"
+    # HDMI/display initialization retunes AUPLL after the codec assigns its
+    # MCLK. Use stable GPLL for I2S0 so that this cannot invalidate the codec
+    # rate before simple-card probes (or while a PCM stream is running).
+    cru = result["/clock-controller@fd7c0000"]["phandle"]
+    result["/i2s@fe470000"]["assigned-clocks"] = b"".join(
+        cru + packed([new_clocks[name]])
+        for name in ("CLK_I2S0_8CH_TX_SRC", "CLK_I2S0_8CH_RX_SRC"))
+    result["/i2s@fe470000"]["assigned-clock-parents"] = (
+        cru + packed([new_clocks["PLL_GPLL"]])) * 2
     result[codec]["compatible"] = b"everest,es8388\0everest,es8328\0"
     rails = {}
     for voltage, name in ((1800000, "vcc_1v8_s3"), (3300000, "vcc_3v3_s3")):
