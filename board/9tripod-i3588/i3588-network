@@ -1,0 +1,46 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+# Bind roles to controllers, not enumeration order or random MAC addresses.
+wan= lan=
+for attempt in $(seq 1 30); do
+    for path in /sys/class/net/eth*; do
+        [ -e "$path/device" ] || continue
+        name=${path##*/}
+        device=$(readlink -f "$path/device")
+        case "$device" in
+            *a40c00000.pcie*) wan=$name ;;
+            *fe1c0000.ethernet*) lan=$name ;;
+        esac
+    done
+    [ -n "$wan" ] && [ -n "$lan" ] && break
+    sleep 1
+done
+printf '%s\n' "$wan" > /run/i3588-wan
+printf '%s\n' "$lan" > /run/i3588-lan
+ip link add br0 type bridge
+ip addr add 192.168.88.1/24 dev br0
+ip link set br0 up
+if [ -n "$lan" ]; then
+    ip link set "$lan" master br0
+    ip link set "$lan" up
+fi
+if [ -n "$wan" ]; then
+    ip link set "$wan" up
+    udhcpc -b -i "$wan" -p /run/udhcpc-wan.pid > /tmp/udhcpc-wan.log 2>&1 &
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+    iptables-legacy -t nat -A POSTROUTING -o "$wan" -j MASQUERADE
+fi
+mkdir -p /run/dnsmasq
+dnsmasq --conf-file=/etc/i3588-dnsmasq.conf > /tmp/i3588-dnsmasq.log 2>&1
+for attempt in $(seq 1 30); do
+    [ -d /sys/class/net/wlan0 ] && break
+    sleep 1
+done
+if [ -d /sys/class/net/wlan0 ]; then
+    ip link set wlan0 up
+    hostapd -B -P /run/hostapd-i3588.pid /etc/i3588-hostapd.conf > /tmp/i3588-hostapd.log 2>&1 || :
+fi
+while :; do
+    /usr/sbin/i3588-issue refresh
+    sleep 5
+done

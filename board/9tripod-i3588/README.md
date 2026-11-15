@@ -26,6 +26,12 @@ The web assistant's build date is injected by `build-i3588-app.sh`; invoking
 plain `go build` leaves the fallback version `unknown`. The rootfs creates
 SSH host keys on first boot and offers root/root for serial and SSH access.
 
+The PCIe Ethernet controller is the DHCP WAN; the onboard GMAC is the LAN.
+The LAN and Wi-Fi AP share bridge br0 at 192.168.88.1/24. The AP SSID is
+`I3588-Recovery` and its WPA2 password is `I3588recovery`. DHCP leases span
+192.168.88.100–192.168.88.200 and WAN traffic is masqueraded. HDMI displays
+the local recovery URLs and refreshes them when the WAN address changes.
+
 SW1 (VOL+/RECOVERY) selects recovery without a USB host, or requests Maskrom
 after a USB host handshake. SW7 BOOT directly forces Maskrom in BootROM and
 is not the software recovery selector. SW5 is PMIC power, SW6 hardware reset,

@@ -1,0 +1,24 @@
+#!/bin/sh
+wan=$(cat /run/i3588-wan 2>/dev/null)
+wan_ip=
+[ -z "$wan" ] || wan_ip=$(ip -4 -o addr show dev "$wan" scope global 2>/dev/null | awk 'NR==1 {split($4,a,"/");print a[1]}')
+{
+    printf '9Tripod I3588 Recovery\n\n'
+    printf 'LAN / Wi-Fi: http://192.168.88.1/\n'
+    if [ -n "$wan_ip" ]; then printf 'WAN: http://%s/\n' "$wan_ip"; else printf 'WAN: waiting for DHCP\n'; fi
+    printf 'Wi-Fi: I3588-Recovery    Password: I3588recovery\n'
+    printf 'SSH / serial login: root / root\n\n'
+} > /run/i3588-issue.new
+if [ "$1" = refresh ] && cmp -s /run/i3588-issue.new /run/i3588-issue.content; then exit 0; fi
+cp /run/i3588-issue.new /run/i3588-issue.content
+{
+    if [ "$1" = refresh ]; then printf '\0338\033[0J'; else printf '\0337'; fi
+    cat /run/i3588-issue.content
+} > /etc/issue.tmp
+mv /etc/issue.tmp /etc/issue
+if [ "$1" = refresh ]; then
+    for pid in $(pidof getty); do
+        args=$(tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+        case " $args " in *' tty1 '*) kill "$pid" 2>/dev/null || : ;; esac
+    done
+fi

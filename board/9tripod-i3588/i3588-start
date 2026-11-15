@@ -7,19 +7,9 @@ mdev -s
 for module in r8169 dwmac-rk phy-rockchip-usbdp gpio-fan rockchip_canfd brcmfmac brcmfmac_wcc brcmfmac_cyw hci_uart btbcm snd_soc_es8328_i2c st_accel_i2c synopsys-hdmirx; do
     modprobe "$module" 2>/dev/null || :
 done
-ip link set wlan0 up 2>/dev/null || :
-if [ -s /etc/wpa_supplicant/wpa_supplicant.conf ]; then
-    wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf -P /run/wpa_supplicant.pid
-    udhcpc -b -i wlan0 -p /run/udhcpc-wlan0.pid >/tmp/udhcpc-wlan0.log 2>&1 &
-fi
 ip link set lo up
-for interface in /sys/class/net/eth*; do
-    [ -d "$interface" ] || continue
-    name=${interface##*/}
-    ip link set "$name" up
-    udhcpc -b -i "$name" -p "/run/udhcpc-$name.pid" \
-        >"/tmp/udhcpc-$name.log" 2>&1 &
-done
+/usr/sbin/i3588-issue
+/usr/sbin/i3588-network &
 ssh-keygen -A
 /usr/sbin/sshd
 /rkdev_arm64 >/tmp/rkdev-console.log 2>&1 &

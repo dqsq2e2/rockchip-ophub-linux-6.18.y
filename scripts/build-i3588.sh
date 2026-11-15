@@ -32,16 +32,22 @@ mkdir -p "$root/dev" "$root/proc" "$root/lib/modules" "$root/lib/firmware"
 test -c "$root/dev/null" || mknod -m 666 "$root/dev/null" c 1 3
 test -c "$root/dev/urandom" || mknod -m 666 "$root/dev/urandom" c 1 9
 cp --remove-destination /etc/resolv.conf "$root/etc/resolv.conf"
-chroot "$root" apk add --no-cache e2fsprogs e2fsprogs-extra util-linux gptfdisk iw wpa_supplicant wireless-regdb
+chroot "$root" apk add --no-cache e2fsprogs e2fsprogs-extra util-linux gptfdisk iw wpa_supplicant wireless-regdb iproute2 hostapd dnsmasq iptables-legacy
+# Restore packaged xtables links that may be missing from the source rootfs.
+chroot "$root" apk fix --no-cache --reinstall iptables
 cp -a "$work/modules/lib/modules/$version" "$root/lib/modules/"
 cp -a "$firmware/." "$root/lib/firmware/"
 depmod -b "$root" "$version"
 install -m 755 "$repo/board/9tripod-i3588/init" "$root/init"
 install -m 755 "$repo/board/9tripod-i3588/i3588-start" "$root/usr/sbin/i3588-start"
+install -m 755 "$repo/board/9tripod-i3588/i3588-network" "$root/usr/sbin/i3588-network"
+install -m 755 "$repo/board/9tripod-i3588/i3588-issue" "$root/usr/sbin/i3588-issue"
+install -m 644 "$repo/board/9tripod-i3588/i3588-hostapd.conf" "$root/etc/i3588-hostapd.conf"
+install -m 644 "$repo/board/9tripod-i3588/i3588-dnsmasq.conf" "$root/etc/i3588-dnsmasq.conf"
 install -m 644 "$repo/board/9tripod-i3588/inittab" "$root/etc/inittab"
 printf '9tripod-i3588-recovery\n' > "$root/etc/hostname"
 printf '127.0.0.1 localhost 9tripod-i3588-recovery\n::1 localhost\n' > "$root/etc/hosts"
-printf '9Tripod I3588 Recovery\n' > "$root/etc/issue"
+printf '9Tripod I3588 Recovery\nLAN / Wi-Fi: http://192.168.88.1/\nWi-Fi: I3588-Recovery    Password: I3588recovery\nSSH / serial login: root / root\n' > "$root/etc/issue"
 printf '9Tripod I3588 Recovery\nSSH / serial login: root / root\n' > "$root/etc/motd"
 date -u +%s > "$root/etc/i3588-build-epoch"
 printf 'root:root\n' | chroot "$root" /bin/busybox chpasswd
@@ -51,6 +57,8 @@ chmod 600 "$root/etc/shadow"
 chmod 1777 "$root/tmp" "$root/var/tmp"
 chroot "$root" /bin/sh -n /init
 chroot "$root" /bin/sh -n /usr/sbin/i3588-start
+chroot "$root" /bin/sh -n /usr/sbin/i3588-network
+chroot "$root" /bin/sh -n /usr/sbin/i3588-issue
 (cd "$repo/rkdev" && go test ./...)
 bash "$repo/scripts/build-i3588-app.sh" "$root/rkdev_arm64"
 cp "$work/kernel/arch/arm64/boot/Image" "$boot/Image"

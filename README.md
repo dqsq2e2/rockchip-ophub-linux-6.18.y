@@ -10,6 +10,8 @@
 
 ## 按键与验证
 
+恢复系统中，PCIe 网口作为 WAN 自动获取地址，板载 GMAC 网口作为 LAN；LAN 与 Wi-Fi AP 桥接在 `192.168.88.1/24`。Wi-Fi 名称 `I3588-Recovery`，密码 `I3588recovery`；LAN DHCP 地址范围为 `192.168.88.100–192.168.88.200`。HDMI 显示访问地址，并在 WAN 地址变化时刷新。
+
 SW1 VOL+/RECOVERY 配置为检测到 USB 主机握手时请求 Maskrom，否则进入已安装的恢复系统；SW7 BOOT 硬件直接进入 Maskrom；SW5 为电源、SW6 为复位、SW2 为音量减。物理按键与线缆组合尚未实测。恢复串口为 1500000 baud，恢复 SSH/串口默认 root/root。
 
 只对 eMMC 做过存储启动测试，NVMe、SATA、USB、TF 的实际启动尚未验证。HDMI RX 的 160 MiB 池可复用为 CMA；采集仍需 HDMI 输入信号验证。
