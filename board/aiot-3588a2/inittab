@@ -1,0 +1,6 @@
+::sysinit:/usr/sbin/aiot3588a2-start
+ttyS1::respawn:/sbin/getty -L -f /run/aiot3588a2-issue.content 1500000 ttyS1 vt100
+tty1::respawn:/sbin/getty 38400 tty1
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/sync
+::shutdown:/bin/umount -a -r

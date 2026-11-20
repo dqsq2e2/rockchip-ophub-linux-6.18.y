@@ -151,7 +151,7 @@ func logRequests(next http.Handler) http.Handler {
 		p := r.URL.Path
 		switch p {
 		case "/api/update_check", "/api/update_download", "/api/update_cancel", "/api/update_upload":
-			http.Error(w, "9Tripod I3588 updates are installed through the system-slot flash workflow", http.StatusNotImplemented)
+			http.Error(w, "SMDT AIOT-3588A V2.0 updates are installed through the system-slot flash workflow", http.StatusNotImplemented)
 			return
 		}
 		if p != "/api/progress" && p != "/api/upload_status" && p != "/api/logs" && !strings.HasPrefix(p, "/res/") {
@@ -686,19 +686,19 @@ var ubootDefaultVars = map[string]string{
 	"bootcmd":             "if test \"${recovery_key}\" = \"1\"; then setenv recovery_key; run recovery_boot; else run boot_system; fi",
 	"bootdelay":           "3",
 	"boot_system":         "run boot_system_usb; run boot_system_nvme; run boot_system_sata; run boot_system_sd; run boot_system_emmc; run recovery_boot",
-	"boot_system_usb":     "usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run i3588_scan; fi; done",
-	"boot_system_nvme":    "pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run i3588_scan; fi; done",
-	"boot_system_sata":    "scsi scan; setenv devtype scsi; for devnum in 0 1; do if scsi dev ${devnum}; then run i3588_scan; fi; done",
-	"boot_system_sd":      "setenv devtype mmc; setenv devnum 1; mmc dev 1; if mmc rescan; then run i3588_scan; fi",
-	"boot_system_emmc":    "setenv devtype mmc; setenv devnum 0; mmc dev 0; if mmc rescan; then run i3588_scan; fi",
-	"i3588_scan":          i3588Scan,
-	"i3588_boot_part":     i3588BootPart,
-	"i3588_recovery_part": i3588RecoveryPart,
-	"recovery_boot":       i3588RecoveryBoot,
+	"boot_system_usb":     "usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run aiot3588a2_scan; fi; done",
+	"boot_system_nvme":    "pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run aiot3588a2_scan; fi; done",
+	"boot_system_sata":    "scsi scan; setenv devtype scsi; for devnum in 0 1; do if scsi dev ${devnum}; then run aiot3588a2_scan; fi; done",
+	"boot_system_sd":      "setenv devtype mmc; setenv devnum 1; mmc dev 1; if mmc rescan; then run aiot3588a2_scan; fi",
+	"boot_system_emmc":    "setenv devtype mmc; setenv devnum 0; mmc dev 0; if mmc rescan; then run aiot3588a2_scan; fi",
+	"aiot3588a2_scan":          aiot3588a2Scan,
+	"aiot3588a2_boot_part":     aiot3588a2BootPart,
+	"aiot3588a2_recovery_part": aiot3588a2RecoveryPart,
+	"recovery_boot":       aiot3588a2RecoveryBoot,
 	"recovery_key":        "0",
 	"cpu":                 "armv8",
 	"fdt_addr_r":          "0x12000000",
-	"fdtfile":             "rockchip/rk3588-9tripod-I3588.dtb",
+	"fdtfile":             "rockchip/rk3588-aiot-3588a2.dtb",
 	"fdtoverlay_addr_r":   "0x12100000",
 	"kernel_addr_r":       "0x02000000",
 	"kernel_comp_addr_r":  "0x0a000000",

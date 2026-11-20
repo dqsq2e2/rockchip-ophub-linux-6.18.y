@@ -45,11 +45,11 @@ func TestLunznTemplate(t *testing.T) {
 	if err := tmpl.Execute(&output, map[string]string{"BuildTime": "test"}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "<title>9Tripod I3588固件更新助手 - RKdev</title>") {
+	if !strings.Contains(output.String(), "<title>SMDT AIOT-3588A V2.0固件更新助手 - RKdev</title>") {
 		t.Fatal("personalized title missing")
 	}
 	if !strings.Contains(output.String(), `id="nav-brand">RKdev`) ||
-		!strings.Contains(output.String(), "<h1>9Tripod I3588固件更新助手 ") ||
+		!strings.Contains(output.String(), "<h1>SMDT AIOT-3588A V2.0固件更新助手 ") ||
 		!strings.Contains(output.String(), `onclick="switchTab(this)">🔀 引导顺序`) {
 		t.Fatal("brand, personalized heading or menu icons missing")
 	}

@@ -7,38 +7,38 @@ import (
 	"strings"
 )
 
-// The factory disk places its boot partition over the I3588 environment offsets.
+// Factory Android uses the environment offsets for other partitions.
 // RAM recovery may inspect that disk, but must never access its environment.
 func validateEnvironmentLayout(parts []gptPartition) error {
 	if _, err := recoveryPartition(parts); err != nil {
-		return fmt.Errorf("不是配套 I3588 恢复布局，拒绝访问 U-Boot 环境变量: %w", err)
+		return fmt.Errorf("不是配套 AIOT-3588A V2.0 恢复布局，拒绝访问 U-Boot 环境变量: %w", err)
 	}
 	return nil
 }
 
-// Keep these in sync with include/configs/9tripod_i3588.h. All filesystem
+// Keep these in sync with include/configs/aiot_3588a2.h. All filesystem
 // partitions are scanned; the eMMC recovery area is reserved explicitly.
-const i3588Scan = "setenv i3588_parts; if part list ${devtype} ${devnum} i3588_parts; then " +
-	"for distro_bootpart in ${i3588_parts}; do " +
-	"if part name ${devtype} ${devnum} 0x${distro_bootpart} i3588_name; then " +
-	"if test \"${i3588_name}\" != I3588_RECOVERY; then run i3588_boot_part; fi; " +
+const aiot3588a2Scan = "setenv aiot3588a2_parts; if part list ${devtype} ${devnum} aiot3588a2_parts; then " +
+	"for distro_bootpart in ${aiot3588a2_parts}; do " +
+	"if part name ${devtype} ${devnum} 0x${distro_bootpart} aiot3588a2_name; then " +
+	"if test \"${aiot3588a2_name}\" != AIOT_RECOVERY; then run aiot3588a2_boot_part; fi; " +
 	"fi; done; fi"
 
-const i3588BootPart = "for prefix in / /boot/; do " +
+const aiot3588a2BootPart = "for prefix in / /boot/; do " +
 	"if test -e ${devtype} ${devnum}:${distro_bootpart} ${prefix}extlinux/extlinux.conf; then " +
 	"sysboot ${devtype} ${devnum}:${distro_bootpart} any ${scriptaddr} ${prefix}extlinux/extlinux.conf; fi; " +
 	"if test -e ${devtype} ${devnum}:${distro_bootpart} ${prefix}boot.scr; then " +
 	"if load ${devtype} ${devnum}:${distro_bootpart} ${scriptaddr} ${prefix}boot.scr; then source ${scriptaddr}; fi; fi; done"
 
-const i3588RecoveryPart = "if part name ${devtype} ${devnum} 1 i3588_name; then " +
-	"if test \"${i3588_name}\" = I3588_RECOVERY; then " +
+const aiot3588a2RecoveryPart = "if part name ${devtype} ${devnum} 1 aiot3588a2_name; then " +
+	"if test \"${aiot3588a2_name}\" = AIOT_RECOVERY; then " +
 	"sysboot ${devtype} ${devnum}:1 any ${scriptaddr} /extlinux/extlinux.conf; fi; fi"
 
-const i3588RecoveryBoot = "echo 9Tripod I3588 Recovery; setenv devtype mmc; " +
-	"for devnum in 0 1; do if mmc dev ${devnum} && mmc rescan; then run i3588_recovery_part; fi; done; " +
-	"usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run i3588_recovery_part; fi; done; " +
-	"pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run i3588_recovery_part; fi; done; " +
-	"scsi scan; setenv devtype scsi; for devnum in 0 1; do if scsi dev ${devnum}; then run i3588_recovery_part; fi; done"
+const aiot3588a2RecoveryBoot = "echo SMDT AIOT-3588A V2.0 Recovery; setenv devtype mmc; " +
+	"for devnum in 0 1; do if mmc dev ${devnum} && mmc rescan; then run aiot3588a2_recovery_part; fi; done; " +
+	"usb start; setenv devtype usb; for devnum in 0 1; do if usb dev ${devnum}; then run aiot3588a2_recovery_part; fi; done; " +
+	"pci enum; nvme scan; setenv devtype nvme; for devnum in 0 1; do if nvme dev ${devnum}; then run aiot3588a2_recovery_part; fi; done; " +
+	"scsi scan; setenv devtype scsi; for devnum in 0 1; do if scsi dev ${devnum}; then run aiot3588a2_recovery_part; fi; done"
 
 func installBootScanner() error {
 	if err := ensureFwEnvConfig(); err != nil {
@@ -55,7 +55,7 @@ func installBootScanner() error {
 		}
 	}
 	var updates strings.Builder
-	for _, key := range []string{"boot_system_usb", "boot_system_nvme", "boot_system_sata", "boot_system_sd", "boot_system_emmc", "i3588_scan", "i3588_boot_part", "i3588_recovery_part", "recovery_boot"} {
+	for _, key := range []string{"boot_system_usb", "boot_system_nvme", "boot_system_sata", "boot_system_sd", "boot_system_emmc", "aiot3588a2_scan", "aiot3588a2_boot_part", "aiot3588a2_recovery_part", "recovery_boot"} {
 		if values[key] != ubootDefaultVars[key] {
 			fmt.Fprintf(&updates, "%s %s\n", key, ubootDefaultVars[key])
 		}
@@ -63,7 +63,7 @@ func installBootScanner() error {
 	if updates.Len() == 0 {
 		return nil
 	}
-	file, err := os.CreateTemp("/tmp", "i3588-boot-env-*")
+	file, err := os.CreateTemp("/tmp", "aiot3588a2-boot-env-*")
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,24 @@
+#!/bin/sh
+wan=$(cat /run/aiot3588a2-wan 2>/dev/null)
+wan_ip=
+[ -z "$wan" ] || wan_ip=$(ip -4 -o addr show dev "$wan" scope global 2>/dev/null | awk 'NR==1 {split($4,a,"/");print a[1]}')
+{
+    printf 'SMDT AIOT-3588A V2.0 Recovery\n\n'
+    printf 'Wi-Fi: http://192.168.88.1/\n'
+    if [ -n "$wan_ip" ]; then printf 'Ethernet: http://%s/\n' "$wan_ip"; else printf 'Ethernet: waiting for DHCP\n'; fi
+    printf 'Wi-Fi: AIOT-3588A2-Recovery\n'
+    printf 'SSH / serial login: root / root\n\n'
+} > /run/aiot3588a2-issue.new
+if [ "$1" = refresh ] && cmp -s /run/aiot3588a2-issue.new /run/aiot3588a2-issue.content; then exit 0; fi
+cp /run/aiot3588a2-issue.new /run/aiot3588a2-issue.content
+{
+    if [ "$1" = refresh ]; then printf '\0338\033[0J'; else printf '\0337'; fi
+    cat /run/aiot3588a2-issue.content
+} > /etc/issue.tmp
+mv /etc/issue.tmp /etc/issue
+if [ "$1" = refresh ]; then
+    for pid in $(pidof getty); do
+        args=$(tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+        case " $args " in *' tty1 '*) kill "$pid" 2>/dev/null || : ;; esac
+    done
+fi

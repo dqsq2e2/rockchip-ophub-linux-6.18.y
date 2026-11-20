@@ -1,0 +1,16 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+mkdir -p /run/sshd /var/empty
+chmod 755 /var/empty
+syslogd -C256
+mdev -s
+for module in brcmfmac snd_soc_es8328_i2c; do
+    modprobe "$module" 2>/dev/null || :
+done
+ip link set lo up
+/usr/sbin/aiot3588a2-issue
+/usr/sbin/aiot3588a2-network &
+ssh-keygen -A
+/usr/sbin/sshd
+/rkdev_arm64 >/tmp/rkdev-console.log 2>&1 &
+echo 'SMDT AIOT-3588A V2.0 Recovery: root / root'

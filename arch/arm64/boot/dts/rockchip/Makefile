@@ -445,3 +445,4 @@ subdir-y	:= $(dts-dirs) overlay
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3588-phx-r3588.dtb
 
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3588-9tripod-I3588.dtb
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3588-aiot-3588a2.dtb
