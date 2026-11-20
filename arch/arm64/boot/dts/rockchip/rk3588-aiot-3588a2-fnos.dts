@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+#include "rk3588-aiot-3588a2.dts"
+
+/* The distribution RKNPU driver exposes all three cores as one device. */
+/delete-node/ &rknn_core_0;
+/delete-node/ &rknn_core_1;
+/delete-node/ &rknn_core_2;
+/delete-node/ &rknn_mmu_0;
+/delete-node/ &rknn_mmu_1;
+/delete-node/ &rknn_mmu_2;
+
+&otp {
+	specification_serial_number: specification-serial-number@6 {
+		reg = <0x06 0x1>;
+		bits = <0 5>;
+	};
+
+	customer_demand: customer-demand@22 {
+		reg = <0x22 0x1>;
+		bits = <4 4>;
+	};
+};
+
+#include "rk3588s-npu.dtsi"
+
+/ {
+	vcc5v0_sys: regulator-vcc5v0-sys {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc5v0_sys";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		regulator-always-on;
+	};
+};
+
+&i2c1 {
+	pinctrl-0 = <&i2c1m2_xfer>;
+	status = "okay";
+
+	vdd_npu_s0: regulator@42 {
+		compatible = "rockchip,rk8602";
+		reg = <0x42>;
+		fcs,suspend-voltage-selector = <1>;
+		regulator-name = "vdd_npu_s0";
+		regulator-min-microvolt = <550000>;
+		regulator-max-microvolt = <950000>;
+		regulator-ramp-delay = <2300>;
+		regulator-boot-on;
+		regulator-always-on;
+		vin-supply = <&vcc5v0_sys>;
+
+		regulator-state-mem {
+			regulator-off-in-suspend;
+		};
+	};
+};
+
+&rknpu {
+	rknpu-supply = <&vdd_npu_s0>;
+	mem-supply = <&vdd_npu_s0>;
+	status = "okay";
+};
+
+&rknpu_mmu {
+	power-domains = <&power RK3588_PD_NPUTOP>;
+	status = "okay";
+};

@@ -15,5 +15,6 @@ make -C "$source_dir" O="$output" i3588_recovery_defconfig
     --enable TYPEC --enable TYPEC_TCPM --enable TYPEC_RT1711H \
     --enable SND_SIMPLE_CARD --module SND_SOC_ES8328 --module SND_SOC_ES8328_I2C
 make -C "$source_dir" O="$output" olddefconfig
-make -C "$source_dir" O="$output" rockchip/rk3588-aiot-3588a2.dtb
+make -C "$source_dir" O="$output" \
+    rockchip/rk3588-aiot-3588a2.dtb rockchip/rk3588-aiot-3588a2-fnos.dtb
 make -C "$source_dir" O="$output" -j"${JOBS:-8}" Image modules
