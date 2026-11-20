@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 #include "rk3588-aiot-3588a2.dts"
 
+&es8388 {
+	/* This clock provider does not expose the separate GRF output gate. */
+	clocks = <&cru I2S0_8CH_MCLKOUT>;
+};
+
 /* The distribution RKNPU driver exposes all three cores as one device. */
 /delete-node/ &rknn_core_0;
 /delete-node/ &rknn_core_1;
@@ -64,4 +69,23 @@
 &rknpu_mmu {
 	power-domains = <&power RK3588_PD_NPUTOP>;
 	status = "okay";
+};
+
+/* Match the Rockchip RGA scheduler shipped with the distribution kernel. */
+&rga3_core0 {
+	compatible = "rockchip,rga3_core0";
+	interrupt-names = "rga3_core0_irq";
+	clock-names = "aclk_rga3_0", "hclk_rga3_0", "clk_rga3_0";
+};
+
+&rga3_core1 {
+	compatible = "rockchip,rga3_core1";
+	interrupt-names = "rga3_core1_irq";
+	clock-names = "aclk_rga3_1", "hclk_rga3_1", "clk_rga3_1";
+};
+
+&rga {
+	compatible = "rockchip,rga2_core0";
+	interrupt-names = "rga2_irq";
+	clock-names = "aclk_rga2", "hclk_rga2", "clk_rga2";
 };

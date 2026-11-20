@@ -65,6 +65,7 @@
 		};
 		simple-audio-card,codec {
 			sound-dai = <&es8388>;
+			system-clock-frequency = <12288000>;
 		};
 	};
 
@@ -182,13 +183,17 @@
 	es8388: audio-codec@11 {
 		compatible = "everest,es8388";
 		reg = <0x11>;
+		clocks = <&cru I2S0_8CH_MCLKOUT_TO_IO>;
+		assigned-clocks = <&cru I2S0_8CH_MCLKOUT>, <&cru CLK_I2S0_8CH_TX>;
+		assigned-clock-parents = <&cru MCLK_I2S0_8CH_TX>;
+		assigned-clock-rates = <0>, <12288000>;
 		#sound-dai-cells = <0>;
 	};
 };
 
 &i2s0_8ch {
 	pinctrl-names = "default";
-	pinctrl-0 = <&i2s0_lrck &i2s0_sclk &i2s0_sdi0 &i2s0_sdo0>;
+	pinctrl-0 = <&i2s0_mclk &i2s0_lrck &i2s0_sclk &i2s0_sdi0 &i2s0_sdo0>;
 	status = "okay";
 };
 
@@ -433,6 +438,7 @@
 };
 
 &hdmi1_sound { status = "okay"; };
+&i2s6_8ch { status = "okay"; };
 &hdptxphy1 { status = "okay"; };
 &vop { status = "okay"; };
 &vop_mmu { status = "okay"; };
