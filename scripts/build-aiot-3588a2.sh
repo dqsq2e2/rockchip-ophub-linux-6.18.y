@@ -47,6 +47,8 @@ install -m 755 "$repo/board/aiot-3588a2/init" "$root/init"
 install -m 755 "$repo/board/aiot-3588a2/aiot3588a2-start" "$root/usr/sbin/aiot3588a2-start"
 install -m 755 "$repo/board/aiot-3588a2/aiot3588a2-network" "$root/usr/sbin/aiot3588a2-network"
 install -m 755 "$repo/board/aiot-3588a2/aiot3588a2-issue" "$root/usr/sbin/aiot3588a2-issue"
+"${CROSS_COMPILE}gcc" -O2 -static -Wall -Wextra -Werror -s \
+    -o "$root/usr/sbin/aiot3588a2-mcu-watchdog" "$repo/board/aiot-3588a2/mcu-watchdog.c"
 install -m 644 "$repo/board/aiot-3588a2/aiot3588a2-hostapd.conf" "$root/etc/aiot3588a2-hostapd.conf"
 install -m 644 "$repo/board/aiot-3588a2/aiot3588a2-dnsmasq.conf" "$root/etc/aiot3588a2-dnsmasq.conf"
 install -m 644 "$repo/board/aiot-3588a2/inittab" "$root/etc/inittab"

@@ -4,7 +4,7 @@ mkdir -p /run/sshd /var/empty
 chmod 755 /var/empty
 syslogd -C256
 mdev -s
-for module in brcmfmac snd_soc_es8328_i2c; do
+for module in i2c-dev brcmfmac snd_soc_es8328_i2c; do
     modprobe "$module" 2>/dev/null || :
 done
 ip link set lo up
